@@ -1,0 +1,91 @@
+[
+  {
+    "family": "Inter",
+    "file": "Inter.ttf",
+    "bytes": 876576,
+    "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+    "download": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf",
+    "project": "https://rsms.me/inter/",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/OFL.txt",
+    "fontVersion": "Version 4.001;git-66647c0bb"
+  },
+  {
+    "family": "Manrope",
+    "file": "Manrope.ttf",
+    "bytes": 164700,
+    "sha256": "3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6",
+    "download": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/Manrope%5Bwght%5D.ttf",
+    "project": "https://github.com/sharanda/manrope",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://raw.githubusercontent.com/google/fonts/main/ofl/manrope/OFL.txt",
+    "fontVersion": "Version 4.505"
+  },
+  {
+    "family": "IBMPlexSans",
+    "file": "IBMPlexSans.ttf",
+    "bytes": 537244,
+    "sha256": "3b031aa4216174205bd8471f88a49b91f093169e9e87bd5262242bc5967fe2e3",
+    "download": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/IBMPlexSans%5Bwdth,wght%5D.ttf",
+    "project": "https://github.com/IBM/plex",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsans/OFL.txt",
+    "fontVersion": "Version 3.201"
+  },
+  {
+    "family": "NotoSansSC",
+    "file": "NotoSansSC.ttf",
+    "bytes": 17772300,
+    "sha256": "a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da",
+    "download": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf",
+    "project": "https://github.com/notofonts/noto-cjk",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/OFL.txt",
+    "fontVersion": "Version 2.004-H2;hotconv 1.0.118;makeotfexe 2.5.65603"
+  },
+  {
+    "family": "NotoSerifSC",
+    "file": "NotoSerifSC.ttf",
+    "bytes": 25125512,
+    "sha256": "050080d9255a86808f2945bffac582b31ef32bc36411ce29563b4961670c66f9",
+    "download": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/NotoSerifSC%5Bwght%5D.ttf",
+    "project": "https://github.com/notofonts/noto-cjk",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/OFL.txt",
+    "fontVersion": "Version 2.003-H1;hotconv 1.1.1;makeotfexe 2.6.0"
+  },
+  {
+    "family": "Literata",
+    "file": "Literata.ttf",
+    "bytes": 955132,
+    "sha256": "b41138c9373112f32abb589cc22e8674b06ed4048b0c513be922bdd26f274440",
+    "download": "https://raw.githubusercontent.com/google/fonts/main/ofl/literata/Literata%5Bopsz,wght%5D.ttf",
+    "project": "https://github.com/googlefonts/literata",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://raw.githubusercontent.com/google/fonts/main/ofl/literata/OFL.txt",
+    "fontVersion": "Version 3.103;gftools[0.9.29]"
+  },
+  {
+    "family": "JetBrainsMono",
+    "file": "JetBrainsMono.ttf",
+    "bytes": 187208,
+    "sha256": "48715a42ec242c21e9f02692891e147d022299a52e48d5e413e1a942193ffeda",
+    "download": "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf",
+    "project": "https://www.jetbrains.com/lp/mono/",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/OFL.txt",
+    "fontVersion": "Version 2.211"
+  },
+  {
+    "family": "WenKai",
+    "file": "WenKai.ttf",
+    "version": "1.522",
+    "bytes": 14116284,
+    "sha256": "1675c708cce181871d9a8adc987f35a0cabc6ff980685cd99f05d2655ea08c4c",
+    "download": "https://github.com/lxgw/LxgwWenkaiGB-Lite/releases/download/v1.522/LXGWWenKaiGBLite-Regular.ttf",
+    "project": "https://github.com/lxgw/LxgwWenKaiGB-Lite",
+    "license": "SIL Open Font License 1.1",
+    "licenseUrl": "https://raw.githubusercontent.com/lxgw/LxgwWenKaiGB-Lite/main/OFL.txt",
+    "fontVersion": "Version 1.522; March 17, 2026"
+  }
+]
