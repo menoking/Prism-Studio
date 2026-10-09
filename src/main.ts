@@ -1,9 +1,10 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, normalizePath, type DropdownComponent } from 'obsidian';
+import { App, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, normalizePath, type DropdownComponent } from 'obsidian';
 import { Activity, Data, DEFAULT_SETTINGS, Lane, Project, Sprint, Task, completeTask, emptyActivity, localDay, markdownTaskLines, normalizeData, sanitizeFolder, wordDelta } from './model';
 import { STUDIO_VIEW, StudioView } from './view';
 import { CaptureModal, NotePicker, TaskModal, ManageModal, HomeLayoutModal } from './modals';
 import { FloatingNotes } from './floating';
 import { NativeGlass } from './glass';
+import { WindowPin } from './window-pin';
 import { ReadingEnhancements } from './reading';
 import { MediaEffects } from './media';
 import { PALETTES, PALETTE_OPTIONS, MATERIAL_OPTIONS, tokenDeclarations } from './appearance';
@@ -14,6 +15,7 @@ export default class PrismPlugin extends Plugin {
   data!: Data;
   floats!: FloatingNotes;
   glass=new NativeGlass();
+  windowPin=new WindowPin();
   reading!: ReadingEnhancements;
   media!: MediaEffects;
   private subscribers=new Set<()=>void>();
@@ -56,6 +58,10 @@ export default class PrismPlugin extends Plugin {
     this.addCommand({id:'arrange-floating-notes',name:'层叠排列浮动笔记',callback:()=>this.floats.arrange()});
     this.addCommand({id:'close-floating-notes',name:'关闭所有浮动笔记',callback:()=>this.floats.closeAll()});
     this.addCommand({id:'toggle-skin',name:'切换柔光主题皮肤',callback:()=>void this.updateSettings({enabled:!this.data.settings.enabled})});
+    this.addCommand({id:'toggle-window-pin',name:'切换窗口置顶',checkCallback:checking=>{
+      if(!Platform.isDesktopApp)return false;
+      if(!checking)this.windowPin.toggle(activeDocument);return true;
+    }});
     this.addCommand({id:'cycle-palette',name:'切换主题配色',callback:()=>this.cyclePalette()});
     this.addCommand({id:'restore-glass',name:'重置玻璃参数',callback:()=>void this.restoreGlass()});
     this.addCommand({id:'import-tasks',name:'从当前笔记导入 Markdown 任务',checkCallback:checking=>{
@@ -97,7 +103,7 @@ export default class PrismPlugin extends Plugin {
   onunload(): void {
     this.active=false;
     this.floats.closeAll(true);
-    this.reading.destroy();this.media.destroy();this.glass.destroy();
+    this.reading.destroy();this.media.destroy();this.glass.destroy();this.windowPin.destroy();
     for(const doc of this.documents){doc.body.classList.remove('prism-skin','prism-media-decks');delete doc.body.dataset.prismMaterial;delete doc.body.dataset.prismPalette;doc.getElementById('prism-dynamic-skin')?.remove();doc.getElementById('prism-font-faces')?.remove();}
     this.documents.clear();this.subscribers.clear();
   }
@@ -160,6 +166,7 @@ export default class PrismPlugin extends Plugin {
   }
   applySkin(doc:Document): void {
     if(!doc.defaultView || doc.defaultView.closed)return;
+    this.windowPin.attach(doc);
     this.documents.add(doc);doc.body.classList.toggle('prism-skin',this.data.settings.enabled);
     doc.body.classList.toggle('prism-media-decks',this.data.settings.imageDecks);
     const s=this.data.settings;

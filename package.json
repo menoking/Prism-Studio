@@ -1,6 +1,6 @@
 {
   "name": "obsidian-prism-studio",
-  "version": "1.5.1",
+  "version": "1.5.3",
   "private": true,
   "description": "Translucent themes, reading enhancements, tasks and a workspace for Obsidian.",
   "scripts": {
@@ -13,7 +13,9 @@
     "test:material": "node scripts/verify-obsidian.mjs --material",
     "test:dashboard": "node scripts/verify-obsidian.mjs --dashboard",
     "test:media": "node scripts/verify-obsidian.mjs --media",
-    "test:typography": "node scripts/verify-obsidian.mjs --typography"
+    "test:typography": "node scripts/verify-obsidian.mjs --typography",
+    "test:window-pin": "node scripts/verify-obsidian.mjs --window-pin",
+    "test:reading-focus": "node scripts/verify-obsidian.mjs --reading-focus"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

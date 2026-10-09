@@ -12,6 +12,8 @@ Prism Studio 提供 **18 套配色、5 种材质、独立的界面与笔记字�
 
 ## 主题效果
 
+桌面端窗口右上角、最小化按钮左侧提供图钉开关。点击将当前窗口固定到最顶层，图钉高亮；再次点击取消。弹出笔记窗口可以分别置顶，关闭主题皮肤后仍可使用。也可以在命令面板执行 **切换窗口置顶**，并为它设置快捷键。置顶状态只在当前会话内生效。
+
 | 薄荷 · 玻璃 | 紫雾 · 亚克力 |
 | --- | --- |
 | ![薄荷玻璃主题](docs/screenshots/mint-glass.png) | ![紫雾亚克力主题](docs/screenshots/violet-acrylic.png) |
@@ -30,7 +32,7 @@ Prism Studio 提供 **18 套配色、5 种材质、独立的界面与笔记字�
 
 ## 安装与升级
 
-1. 在 [Releases](https://github.com/menoking/Prism-Studio/releases/latest) 下载 **`prism-studio-1.5.1.zip`**，解压。
+1. 在 [Releases](https://github.com/menoking/Prism-Studio/releases/latest) 下载完整安装包，解压。
 2. 将完整的 `prism-studio` 文件夹复制到知识库的 `.obsidian/plugins/` 下。
 3. 打开 Obsidian → 设置 → 第三方插件，启用 **Prism Studio**。
 4. 进入 **设置 → Prism Studio** 调整配色、材质和字体，或点击左侧 Prism Studio 图标打开工作台。
@@ -84,7 +86,7 @@ Release 中的 `Install-Prism.ps1` 可与解压后的 `prism-studio` 文件夹�
 
 ![真实阅读视图中的自动图片堆叠与章节刻度](docs/screenshots/reading-deck.png)
 
-- **章节滚动条：** 刻度、章节标记、悬浮小标题；支持拖动、点击和键盘导航。
+- **章节滚动条：** 刻度、章节标记、悬浮小标题；支持拖动、点击和键盘导航。鼠标滚动保留编辑器焦点与光标，避免正在编辑的长代码块因失焦变回预览。
 - **自动图片堆叠：** 阅读模式下，连续图片自动组成层叠卡组，同一行多张图片也能识别。
 - **展开与收起：** 右上角淡色图标控制展开；展开后有吸顶收起图标和组末尾收起按钮。
 - **图片比例：** 默认按原比例叠放，完整保留内容；也可选择居中裁切铺满卡片。展开始终显示完整原图。

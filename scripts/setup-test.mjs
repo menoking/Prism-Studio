@@ -26,11 +26,21 @@ if(blueTopazSource&&await fs.stat(path.join(blueTopazSource,'theme.css')).catch(
   for(const name of ['theme.css','manifest.json'])await fs.copyFile(path.join(blueTopazSource,name),path.join(destination,name));
 }
 const harnessPath=path.join(vault,'.obsidian','plugins','prism-native-harness');await fs.mkdir(harnessPath,{recursive:true});
-const suiteHarness=process.env.PRISM_TEST_SUITE==='typography'?'typography-harness.cjs':process.env.PRISM_TEST_SUITE==='target-media'?'target-media-harness.cjs':process.env.PRISM_TEST_SUITE==='media'?'media-harness.cjs':process.env.PRISM_TEST_SUITE==='dashboard'?'dashboard-harness.cjs':process.env.PRISM_TEST_SUITE==='material'?'material-harness.cjs':process.env.PRISM_TEST_SUITE==='appearance'?'appearance-harness.cjs':'native-harness.cjs';
+const readingFocus=process.env.PRISM_TEST_SUITE==='reading-focus';
+const suiteHarness=readingFocus?'reading-focus-harness.cjs':process.env.PRISM_TEST_SUITE==='window-pin'?'window-pin-harness.cjs':process.env.PRISM_TEST_SUITE==='typography'?'typography-harness.cjs':process.env.PRISM_TEST_SUITE==='target-media'?'target-media-harness.cjs':process.env.PRISM_TEST_SUITE==='media'?'media-harness.cjs':process.env.PRISM_TEST_SUITE==='dashboard'?'dashboard-harness.cjs':process.env.PRISM_TEST_SUITE==='material'?'material-harness.cjs':process.env.PRISM_TEST_SUITE==='appearance'?'appearance-harness.cjs':'native-harness.cjs';
 await fs.copyFile(path.join(root,'scripts',suiteHarness),path.join(harnessPath,'main.js'));
 await write(path.join(harnessPath,'suite.json'),{failedOnly:process.env.PRISM_TEST_FAILED_ONLY==='1'});
 await write(path.join(harnessPath,'manifest.json'),{id:'prism-native-harness',name:'Prism Native Test Harness',version:'1.0.0',minAppVersion:'1.5.0',author:'Local tests',description:'Runs only in .test-vault',isDesktopOnly:true});
-await write(path.join(vault,'.obsidian','community-plugins.json'),['prism-studio','prism-native-harness']);
+if(readingFocus){
+  if(!process.env.PRISM_REFERENCE_VAULT||!process.env.PRISM_REFERENCE_NOTE)throw new Error('Reading focus test requires --vault-path and --note-path');
+  const sourceVault=path.resolve(process.env.PRISM_REFERENCE_VAULT),sourceNote=path.resolve(sourceVault,process.env.PRISM_REFERENCE_NOTE);
+  if(!sourceNote.startsWith(sourceVault+path.sep))throw new Error('Reference note must be inside the reference vault');
+  const dataview=path.join(vault,'.obsidian','plugins','dataview');await fs.mkdir(dataview,{recursive:true});
+  for(const name of ['main.js','manifest.json','styles.css'])await fs.copyFile(path.join(sourceVault,'.obsidian','plugins','dataview',name),path.join(dataview,name));
+  await write(path.join(dataview,'data.json'),{enableDataviewJs:true,enableInlineDataviewJs:true});
+  await fs.copyFile(sourceNote,path.join(vault,'Native Dataview Focus.md'));
+}
+await write(path.join(vault,'.obsidian','community-plugins.json'),readingFocus?['dataview','prism-studio','prism-native-harness']:['prism-studio','prism-native-harness']);
 await write(path.join(vault,'.obsidian','core-plugins.json'),['file-explorer','global-search','switcher','graph','backlink','properties','page-preview','templates','note-composer','command-palette','editor-status','bookmarks','outline','word-count']);
 await write(path.join(vault,'Welcome.md'),`---
 tags: [knowledge, prism]

@@ -1,5 +1,20 @@
 /* Prism Studio: independent palette and material over native desktop glass.
-   Every global override is scoped to body.prism-skin and removed on unload. */
+   Global skin overrides are scoped to body.prism-skin; window controls work independently. */
+.titlebar-button.prism-window-pin {
+  -webkit-app-region: no-drag; cursor: pointer; flex-shrink: 0;
+  color: var(--text-muted); position: relative;
+}
+.titlebar-button.prism-window-pin svg { width: 16px; height: 16px; transform: rotate(-30deg); }
+.titlebar-button.prism-window-pin.is-active {
+  color: var(--prism-accent, var(--interactive-accent));
+  background: color-mix(in srgb, var(--prism-accent, var(--interactive-accent)) 16%, transparent);
+}
+.titlebar-button.prism-window-pin.is-active svg { transform: none; }
+.titlebar-button.prism-window-pin:focus-visible { outline: 2px solid var(--prism-accent, var(--interactive-accent)); outline-offset: -3px; }
+body.mod-windows.prism-window-pin-mounted:not(.mod-system-rtl, .is-fullscreen),
+body.mod-linux.prism-window-pin-mounted:not(.mod-system-rtl, .is-fullscreen) {
+  --frame-right-space: calc(var(--prism-window-controls-width) - var(--frame-ribbon-right, 0px));
+}
 .prism-view, .prism-modal, .prism-floating, body.prism-skin {
   --prism-blue: 190 222 242;
   --prism-accent-rgb: 63 118 151; --prism-surface-rgb: 237 248 255;

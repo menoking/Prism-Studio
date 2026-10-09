@@ -75,7 +75,7 @@ class ReadingRail {
       for(let i=0;i<=50;i++)this.ticks.createDiv({cls:`prism-rail-scale${i%5===0?' is-major':''}`,attr:{style:`top:${i*2}%`}});
       for(const mark of this.marks){
         const tick=this.ticks.createEl('button',{cls:'prism-rail-heading',attr:{'aria-label':mark.title,title:mark.title,style:`top:${clamp(mark.offset/maximum)*100}%;--prism-heading-level:${mark.level}`}});
-        tick.addEventListener('pointerdown',event=>{event.stopPropagation();});
+        tick.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();});
         tick.addEventListener('click',event=>{event.stopPropagation();this.jump(mark);});
       }
     }
@@ -111,7 +111,11 @@ class ReadingRail {
     }
   }
   private startDrag(event:PointerEvent):void {
-    if(event.button!==0)return;event.preventDefault();this.el.focus();this.dragging=true;this.el.classList.add('is-dragging');
+    if(event.button!==0)return;
+    // Pointer scrolling must not blur the editor: Live Preview would replace an
+    // active code block with its rendered widget, changing the document height.
+    // Keyboard users can still focus the rail with Tab and use its arrow keys.
+    event.preventDefault();this.dragging=true;this.el.classList.add('is-dragging');
     const thumb=this.thumb.getBoundingClientRect();this.dragOffset=event.target===this.thumb?event.clientY-thumb.top:thumb.height/2;
     try{this.el.setPointerCapture(event.pointerId);}catch{/* Synthetic events and legacy hosts. */}this.drag(event);
   }

@@ -9,12 +9,15 @@ const dashboard=process.argv.includes('--dashboard');
 const media=process.argv.includes('--media');
 const targetMedia=process.argv.includes('--target-media');
 const typography=process.argv.includes('--typography');
+const windowPin=process.argv.includes('--window-pin');
+const readingFocus=process.argv.includes('--reading-focus');
+const arg=name=>{const i=process.argv.indexOf(name);return i>=0?process.argv[i+1]:undefined;};
 await fs.access(binary);const started=Date.now();
-const setup=spawn(process.execPath,[path.join(root,'scripts/setup-test.mjs'),'--reset'],{cwd:root,stdio:'inherit',windowsHide:true,env:{...process.env,PRISM_TEST_SUITE:typography?'typography':targetMedia?'target-media':media?'media':dashboard?'dashboard':material?'material':appearance?'appearance':'full',PRISM_TEST_FAILED_ONLY:process.argv.includes('--failed-only')?'1':'0'}});
+const setup=spawn(process.execPath,[path.join(root,'scripts/setup-test.mjs'),'--reset'],{cwd:root,stdio:'inherit',windowsHide:true,env:{...process.env,PRISM_TEST_SUITE:readingFocus?'reading-focus':windowPin?'window-pin':typography?'typography':targetMedia?'target-media':media?'media':dashboard?'dashboard':material?'material':appearance?'appearance':'full',PRISM_REFERENCE_VAULT:arg('--vault-path')||process.env.PRISM_REFERENCE_VAULT,PRISM_REFERENCE_NOTE:arg('--note-path')||process.env.PRISM_REFERENCE_NOTE,PRISM_TEST_FAILED_ONLY:process.argv.includes('--failed-only')?'1':'0'}});
 await new Promise((resolve,reject)=>{setup.on('exit',code=>code===0?resolve():reject(new Error(`Fixture setup failed: ${code}`)));setup.on('error',reject);});
 const app=spawn(binary,[`--user-data-dir=${path.join(root,'.test-profile')}`,'--force-renderer-accessibility'],{cwd:root,stdio:'ignore',windowsHide:true});
 await fs.writeFile(path.join(root,'.test-process.json'),JSON.stringify({pid:app.pid,binary,profile:path.join(root,'.test-profile'),started},null,2));
-const deadline=Date.now()+90000;const output=path.join(root,typography?'verification/typography-results.json':targetMedia?'verification/target-media-results.json':media?'verification/media-results.json':dashboard?'verification/dashboard-results.json':material?'verification/material-results.json':appearance?'verification/appearance-results.json':'verification/native-results.json');
+const deadline=Date.now()+90000;const output=path.join(root,readingFocus?'verification/reading-focus-results.json':windowPin?'verification/window-pin-results.json':typography?'verification/typography-results.json':targetMedia?'verification/target-media-results.json':media?'verification/media-results.json':dashboard?'verification/dashboard-results.json':material?'verification/material-results.json':appearance?'verification/appearance-results.json':'verification/native-results.json');
 console.log('Running native tests in the isolated .test-vault. On the first run, trust only this locally created test vault.');
 let report;
 while(Date.now()<deadline){try{const value=JSON.parse(await fs.readFile(output,'utf8'));if(Date.parse(value.started)>=started && (value.finished||value.fatal)){report=value;break;}}catch{}await new Promise(r=>setTimeout(r,500));}
