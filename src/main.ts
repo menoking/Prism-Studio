@@ -1,5 +1,5 @@
 import { App, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, normalizePath, type DropdownComponent } from 'obsidian';
-import { Activity, Data, DEFAULT_SETTINGS, Lane, Project, Sprint, Task, completeTask, emptyActivity, localDay, markdownTaskLines, normalizeData, sanitizeFolder, wordDelta } from './model';
+import { Activity, Data, DEFAULT_SETTINGS, Lane, Project, Sprint, Task, completeTask, emptyActivity, emptyFileStats, localDay, markdownTaskLines, normalizeData, sanitizeFolder, wordDelta } from './model';
 import { STUDIO_VIEW, StudioView } from './view';
 import { CaptureModal, NotePicker, TaskModal, ManageModal, HomeLayoutModal } from './modals';
 import { FloatingNotes } from './floating';
@@ -8,7 +8,7 @@ import { WindowPin } from './window-pin';
 import { ReadingEnhancements } from './reading';
 import { MediaEffects } from './media';
 import { PALETTES, PALETTE_OPTIONS, MATERIAL_OPTIONS, tokenDeclarations } from './appearance';
-import { UI_FONTS, NOTE_FONTS, UI_FONT_OPTIONS, NOTE_FONT_OPTIONS, fontFaceRules, noteFontFamily, typographyRules } from './typography';
+import { UI_FONTS, NOTE_FONTS, UI_FONT_OPTIONS, NOTE_FONT_OPTIONS, NOTE_FONT_SIZE_MIN, NOTE_FONT_SIZE_MAX, adjustNoteFontSize, fontFaceRules, noteFontFamily, typographyRules } from './typography';
 
 type Snapshot = Pick<Data,'tasks'|'projects'|'sprints'> & {counts:Record<string,number>;syncedIds:string[];fileChange?:{path:string;before:string;after:string;created:boolean}};
 export default class PrismPlugin extends Plugin {
@@ -85,15 +85,17 @@ export default class PrismPlugin extends Plugin {
     }));
     this.registerEvent(this.app.vault.on('create',file=>{if(file instanceof TFile && file.extension==='md')void this.trackFile(file,true);}));
     this.registerEvent(this.app.vault.on('modify',file=>{if(file instanceof TFile && file.extension==='md')void this.trackFile(file,false);}));
+    this.registerEvent(this.app.workspace.on('file-open',file=>{if(file instanceof TFile && file.extension==='md')this.trackOpen(file);}));
     this.registerEvent(this.app.metadataCache.on('changed',()=>this.notify()));
     this.registerEvent(this.app.vault.on('rename',(file,oldPath)=>{
       const baseline=this.baselines.get(oldPath);if(baseline!==undefined){this.baselines.set(file.path,baseline);this.baselines.delete(oldPath);}
       for(const task of this.data.tasks){if(task.notePath===oldPath)task.notePath=file.path;if(task.source?.path===oldPath)task.source.path=file.path;}
       for(const day of Object.values(this.data.activity))if(day.notes[oldPath]){day.notes[file.path]=day.notes[oldPath];delete day.notes[oldPath];}
+      if(this.data.fileStats[oldPath]){this.data.fileStats[file.path]=this.data.fileStats[oldPath];delete this.data.fileStats[oldPath];}
       if(this.data.drafts[oldPath]){this.data.drafts[file.path]=this.data.drafts[oldPath];delete this.data.drafts[oldPath];}
       void this.save();this.notify();
     }));
-    this.registerEvent(this.app.vault.on('delete',file=>{this.baselines.delete(file.path);this.notify();}));
+    this.registerEvent(this.app.vault.on('delete',file=>{this.baselines.delete(file.path);delete this.data.fileStats[file.path];this.notify();}));
     this.registerInterval(window.setInterval(()=>this.tick(),15000));
     this.app.workspace.onLayoutReady(()=>{
       void this.initializeBaselines();
@@ -104,7 +106,7 @@ export default class PrismPlugin extends Plugin {
     this.active=false;
     this.floats.closeAll(true);
     this.reading.destroy();this.media.destroy();this.glass.destroy();this.windowPin.destroy();
-    for(const doc of this.documents){doc.body.classList.remove('prism-skin','prism-media-decks');delete doc.body.dataset.prismMaterial;delete doc.body.dataset.prismPalette;doc.getElementById('prism-dynamic-skin')?.remove();doc.getElementById('prism-font-faces')?.remove();}
+    for(const doc of this.documents){doc.body.classList.remove('prism-skin','prism-note-wheel-zoom','prism-media-decks');delete doc.body.dataset.prismMaterial;delete doc.body.dataset.prismPalette;doc.getElementById('prism-dynamic-skin')?.remove();doc.getElementById('prism-font-faces')?.remove();}
     this.documents.clear();this.subscribers.clear();
   }
   async initializeBaselines(): Promise<void> {
@@ -121,7 +123,12 @@ export default class PrismPlugin extends Plugin {
       const content=await this.app.vault.read(file);
       const before=this.baselines.get(file.path);
       this.baselines.set(file.path,content);
-      if(!this.data.settings.recordActivity || (!created && before===undefined))return;
+      let bumped=false;
+      if(!created && before!==undefined && content!==before){
+        const stats=this.data.fileStats[file.path] ||= emptyFileStats();
+        stats.edits++;stats.lastEdited=Date.now();bumped=true;
+      }
+      if(!this.data.settings.recordActivity || (!created && before===undefined)){if(bumped){await this.save();this.notify();}return;}
       const delta=wordDelta(before??'',content);
       const day=this.today();
       const entry=day.notes[file.path] ||= {added:0,revised:0,created:false,edits:0};
@@ -135,6 +142,11 @@ export default class PrismPlugin extends Plugin {
     this.fileQueue.set(file.path,work);await work;if(this.fileQueue.get(file.path)===work)this.fileQueue.delete(file.path);
   }
   today(): Activity {return this.data.activity[localDay()] ||= emptyActivity();}
+  trackOpen(file:TFile): void {
+    const stats=this.data.fileStats[file.path] ||= emptyFileStats();
+    stats.opens++;stats.lastOpened=Date.now();
+    void this.save();this.notify();
+  }
   tick(): void {
     const now=Date.now(),elapsed=Math.min(15,(now-this.tickTime)/1000);this.tickTime=now;
     if(this.data.settings.recordActivity && !document.hidden){
@@ -164,10 +176,25 @@ export default class PrismPlugin extends Plugin {
     this.refreshSkin();await this.save();this.notify();this.updateStatus();
     this.media.refresh();this.reading.refresh();
   }
+  private attachNoteWheelZoom(doc:Document):void {
+    const onWheel=(event:WheelEvent)=>{
+      if(!this.data.settings.noteWheelZoom || !event.ctrlKey || event.altKey || event.shiftKey || !event.deltaY)return;
+      const target=event.target as Element|null;
+      if(!target?.closest?.('.workspace-leaf-content[data-type="markdown"]'))return;
+      if(!target.closest('.markdown-source-view .cm-scroller, .markdown-reading-view .markdown-preview-view'))return;
+      event.preventDefault();
+      const size=adjustNoteFontSize(this.data.settings.fontSize,event.deltaY);
+      if(size!==this.data.settings.fontSize)void this.updateSettings({fontSize:size});
+    };
+    doc.addEventListener('wheel',onWheel,{capture:true,passive:false});
+    this.register(()=>doc.removeEventListener('wheel',onWheel,true));
+  }
   applySkin(doc:Document): void {
     if(!doc.defaultView || doc.defaultView.closed)return;
     this.windowPin.attach(doc);
-    this.documents.add(doc);doc.body.classList.toggle('prism-skin',this.data.settings.enabled);
+    if(!this.documents.has(doc)){this.documents.add(doc);this.attachNoteWheelZoom(doc);}
+    doc.body.classList.toggle('prism-skin',this.data.settings.enabled);
+    doc.body.classList.toggle('prism-note-wheel-zoom',this.data.settings.noteWheelZoom && !this.data.settings.enabled);
     doc.body.classList.toggle('prism-media-decks',this.data.settings.imageDecks);
     const s=this.data.settings;
     doc.body.dataset.prismMaterial=s.material;doc.body.dataset.prismPalette=s.palette;
@@ -185,7 +212,8 @@ export default class PrismPlugin extends Plugin {
     const file=this.app.vault.getAbstractFileByPath(s.backgroundPath);
     if(file instanceof TFile && /^(png|jpg|jpeg|webp|gif|avif)$/i.test(file.extension)) background=`url(${JSON.stringify(this.app.vault.getResourcePath(file))})`;
     const rules=`body.prism-skin, .prism-view, .prism-floating, .prism-modal {${tokenDeclarations(s)}--prism-strength:${s.intensity/100};--prism-opacity:${s.opacity/100};--prism-blur:${s.blur}px;--prism-radius:${s.radius}px;--prism-note-size:${s.fontSize}px;--prism-line-height:${s.lineHeight};--prism-note-width:${s.noteWidth}px;--prism-wallpaper:${background};}
-    body.theme-dark.prism-skin, .theme-dark .prism-view, .theme-dark .prism-floating, .theme-dark .prism-modal {${tokenDeclarations(s,true)}}${typographyRules(s)}`;
+    body.theme-dark.prism-skin, .theme-dark .prism-view, .theme-dark .prism-floating, .theme-dark .prism-modal {${tokenDeclarations(s,true)}}
+    body.prism-note-wheel-zoom .workspace-leaf-content[data-type="markdown"] {--prism-note-size:${s.fontSize}px;--font-text-size:var(--prism-note-size);}${typographyRules(s)}`;
     if(style.textContent!==rules)style.textContent=rules;
   }
   refreshSkin(): void {for(const doc of this.documents){if(!doc.defaultView || doc.defaultView.closed){this.documents.delete(doc);continue;}this.applySkin(doc);}}
@@ -421,9 +449,10 @@ class PrismSettings extends PluginSettingTab {
       noteDropdown=c;c.addOptions(NOTE_FONT_OPTIONS).setValue(this.plugin.data.settings.noteFont).onChange(async value=>{await this.plugin.updateSettings({noteFont:value as Data['settings']['noteFont']});refreshPreview();});
     });
     new Setting(section).setName('默认笔记使用等宽字体').setDesc('仅在笔记字体为「当前字体（默认）」时生效。代码块仍使用 Obsidian 的代码字体。').addToggle(c=>{monoToggle=c;c.setValue(this.plugin.data.settings.mono).onChange(async value=>{await this.plugin.updateSettings({mono:value});refreshPreview();});});
-    for(const [key,label,min,max,step] of [['fontSize','笔记字号',12,24,1],['lineHeight','笔记行高',1.3,2.4,.1],['noteWidth','笔记最大宽度',500,1400,20]] as const){
+    for(const [key,label,min,max,step] of [['fontSize','笔记字号',NOTE_FONT_SIZE_MIN,NOTE_FONT_SIZE_MAX,1],['lineHeight','笔记行高',1.3,2.4,.1],['noteWidth','笔记最大宽度',500,1400,20]] as const){
       new Setting(section).setName(label).addSlider(c=>c.setLimits(min,max,step).setValue(this.plugin.data.settings[key]).setDynamicTooltip().onChange(async value=>{await this.plugin.updateSettings({[key]:value});refreshPreview();}));
     }
+    new Setting(section).setName('Ctrl + 鼠标滚轮调整笔记字号').setDesc('开启后，在 Markdown 阅读或编辑正文区域按住 Ctrl 滚动；向上放大，向下缩小，每次 1 px。仅改变笔记字号，不缩放整个界面。').addToggle(c=>c.setValue(this.plugin.data.settings.noteWheelZoom).onChange(v=>void this.plugin.updateSettings({noteWheelZoom:v})));
     const previews=section.createDiv({cls:'prism-font-previews'});
     const uiCard=previews.createDiv({cls:'prism-font-preview'});uiCard.createSpan({text:'界面预览',cls:'prism-font-preview-label'});
     uiPreview=uiCard.createDiv({cls:'prism-font-preview-ui',text:'Prism Studio · 阅读与整理\nLibrary · Notes · 0123456789'});

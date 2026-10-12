@@ -46,7 +46,7 @@ module.exports=class DashboardHarness extends Plugin {
       await check('Every component can hide, persist and restore across workbench sections',async()=>{
         click(view.contentEl,'自定义工作台');await until(()=>document.querySelector('[data-prism-widget-toggle]'));
         const modal=document.querySelector('[data-prism-widget-toggle]').closest('.modal');
-        assert(modal.querySelectorAll('[data-prism-widget-toggle]').length===10,'Missing component switches');
+        assert(modal.querySelectorAll('[data-prism-widget-toggle]').length===keys.length,'Missing component switches');
         for(const key of keys){
           modal.querySelector(`[data-prism-widget-toggle="${key}"]`).click();
           await until(()=>prism.data.settings.homeWidgets[key]===false);
@@ -63,10 +63,11 @@ module.exports=class DashboardHarness extends Plugin {
         const restoredModal=document.querySelector('[data-prism-widget-toggle]').closest('.modal');
         click(restoredModal,'显示全部');await until(()=>Object.values(prism.data.settings.homeWidgets).every(Boolean));await wait(180);
         click(restoredModal,'完成');
-        click(view.contentEl,'创作');assert(view.contentEl.querySelectorAll('[data-prism-widget]').length===5,'Creative widgets not restored');
+        assert(view.contentEl.querySelector('[data-prism-widget="createdNotes"]'),'Created-note timeline not restored');
+        click(view.contentEl,'创作');assert(view.contentEl.querySelectorAll('[data-prism-widget]').length===6,'Creative widgets not restored');
         assert(view.contentEl.querySelector('.prism-home-wide'),'Last unpaired card does not fill row');
         click(view.contentEl,'知识');assert(view.contentEl.querySelector('[data-prism-widget="tags"]'),'Knowledge tags not restored');
-        click(view.contentEl,'今天');assert(view.contentEl.querySelectorAll('[data-prism-widget]').length===6,'Home widgets not restored');
+        click(view.contentEl,'今天');assert(view.contentEl.querySelectorAll('[data-prism-widget]').length===7,'Home widgets not restored');
       });
     }catch(e){report.fatal={error:String(e),stack:e.stack};}
     finally{

@@ -1,6 +1,6 @@
 import { ItemView, Menu, Notice, TFile, ViewStateResult, WorkspaceLeaf } from 'obsidian';
 import type PrismPlugin from './main';
-import { LANES, Lane, Task, emptyActivity, filterTasks, heatmapDays, isLane, isToday, localDay, metricValue, score, streaks } from './model';
+import { LANES, Lane, Task, activityLevel, inCreatedNoteRange, emptyActivity, filterTasks, hasSubstantiveModification, heatmapDays, isLane, isToday, localDay, metricValue, score, streaks } from './model';
 import { CaptureModal, NotePicker, HomeLayoutModal } from './modals';
 import { button, empty, formatDate, icon, stat } from './ui';
 
@@ -11,6 +11,7 @@ export class StudioView extends ItemView{
   tab:'home'|'tasks'|'pulse'='home';
   private lane:Lane='today';private projectId='';private sprintId='';private query='';private board=false;
   private metric='score';private selectedDay=localDay();private reviewTab='today';
+  private createdView:'today'|'week'|'month'|'modified'='today';private createdNonEmptyOnly=false;
   private rangeWeeks=52;
   private unsubscribe?:()=>void;private renderTimer?:number;
   constructor(leaf:WorkspaceLeaf,public plugin:PrismPlugin){super(leaf);}
@@ -126,6 +127,10 @@ export class StudioView extends ItemView{
     const actions=top.createDiv({cls:'prism-actions'});button(actions,'自定义工作台','sliders-horizontal',()=>new HomeLayoutModal(this.plugin).open());button(actions,'今天的日记','calendar-days',()=>void this.plugin.dailyNote());button(actions,'快速收集','plus',()=>new CaptureModal(this.plugin).open(),'prism-primary');
     const nav=shell.createDiv({cls:'prism-lane-tabs'});for(const [tab,label] of [['today','今天'],['create','创作'],['knowledge','知识'],['review','复盘']] as const)button(nav,label,'',()=>{this.reviewTab=tab;this.render();},this.reviewTab===tab?'is-active':'');
     const all=this.plugin.getFiles();
+    const createdByTime=all.filter(file=>file.stat.ctime>0).sort((a,b)=>b.stat.ctime-a.stat.ctime);
+    const modifiedByTime=all.filter(file=>hasSubstantiveModification(file.stat.mtime,file.stat.ctime)).sort((a,b)=>b.stat.mtime-a.stat.mtime);
+    const viewedByTime=Object.entries(this.plugin.data.fileStats).filter(([,stats])=>stats.lastOpened>0).sort((a,b)=>b[1].lastOpened-a[1].lastOpened)
+      .map(([path])=>this.app.vault.getAbstractFileByPath(path)).filter((file):file is TFile=>file instanceof TFile);
     const isStatus=(file:TFile,status:string[])=>{const metadata=this.app.metadataCache.getFileCache(file)?.frontmatter;return status.includes(String(metadata?.status||metadata?.review_status||'').toLowerCase());};
     const inbox=all.filter(f=>f.path.startsWith(this.plugin.data.settings.captureFolder+'/')||isStatus(f,['inbox','待整理']));
     const review=all.filter(f=>isStatus(f,['review','reviewing','待复核','内容待回写','待回写']));
@@ -136,6 +141,7 @@ export class StudioView extends ItemView{
     const grid=stats.createDiv({cls:'prism-stats prism-stats-six'});
     stat(grid,'未完成',String(tasks.filter(t=>t.lane!=='done').length),'当前行动');stat(grid,'逾期',String(tasks.filter(t=>t.due && t.due<localDay() && t.lane!=='done').length),'需要重新安排');stat(grid,'等待',String(tasks.filter(t=>t.lane==='waiting').length),'等待依赖');stat(grid,'已完成',String(tasks.filter(t=>t.lane==='done').length),'历史完成记录');stat(grid,'待回写与复核',String(review.length),'笔记 status');stat(grid,'收件箱积压',String(inbox.length),'待整理材料');
     }
+    if(visible.createdNotes)this.createdNotesSection(shell,createdByTime,modifiedByTime);
     const cards=shell.createDiv({cls:'prism-home-grid'});
     if(this.reviewTab==='today'||this.reviewTab==='review'){
       if(visible.actions){const action=this.homeSection(cards,'行动收口','list-todo',`${tasks.filter(t=>isToday(t)).length} 项待办`);action.dataset.prismWidget='actions';const today=tasks.filter(t=>isToday(t)).slice(0,6);if(!today.length)empty(action,'今天的行动清单很清爽。','circle-check');else for(const task of today)this.taskRow(action,task);}
@@ -143,10 +149,10 @@ export class StudioView extends ItemView{
       if(visible.inbox)this.noteSection(cards,'收件箱积压','inbox',inbox,'快速收集的内容会出现在这里。','inbox');
       if(visible.projects)this.noteSection(cards,'内容项目复盘','folder-kanban',projectFiles,'为笔记添加 project 属性，或设置 status: project。','projects');
     }else if(this.reviewTab==='create'){
-      if(visible.recentEdits)this.noteSection(cards,'最近编辑','pencil',all.slice(0,12),'知识库还没有 Markdown 笔记。','recentEdits');if(visible.projects)this.noteSection(cards,'创作中的项目','folder-kanban',projectFiles,'为笔记添加 project 属性以加入创作项目。','projects');
+      if(visible.recentEdits)this.noteSection(cards,'最近编辑','pencil',modifiedByTime.slice(0,12),'最近修改过的笔记会出现在这里。','recentEdits');if(visible.projects)this.noteSection(cards,'创作中的项目','folder-kanban',projectFiles,'为笔记添加 project 属性以加入创作项目。','projects');
       if(visible.creation){const tools=this.homeSection(cards,'开始创作','feather','');tools.dataset.prismWidget='creation';button(tools,'收集一个想法','plus',()=>new CaptureModal(this.plugin).open(),'prism-primary');button(tools,'打开今天的日记','calendar-days',()=>void this.plugin.dailyNote());button(tools,'创建行动任务','list-todo',()=>this.plugin.newTask());}
     }else{
-      if(visible.recentNotes)this.noteSection(cards,'最近笔记','library',all.slice(0,12),'通过快速收集添加第一篇笔记。','recentNotes');
+      if(visible.recentNotes)this.noteSection(cards,'最近查看','eye',viewedByTime.slice(0,12),'打开查看过的笔记会出现在这里。','recentNotes');
       if(visible.tags){
       const tags=this.homeSection(cards,'知识标签','tags','');const counts=new Map<string,number>();for(const file of all){const cache=this.app.metadataCache.getFileCache(file);const values=new Set([...(cache?.tags||[]).map(t=>t.tag),...this.frontmatterTags(cache?.frontmatter?.tags)]);for(const tag of values)counts.set(tag,(counts.get(tag)||0)+1);}
       tags.dataset.prismWidget='tags';
@@ -166,6 +172,54 @@ export class StudioView extends ItemView{
     const section=this.homeSection(parent,title,name,`${files.length} 篇`);if(widget)section.dataset.prismWidget=widget;const list=section.createDiv({cls:'prism-note-list'});if(!files.length)empty(list,message,name);
     for(const file of files.slice(0,8)){const row=list.createDiv({cls:'prism-note-row'});const link=row.createEl('button',{cls:'prism-note-link',text:file.basename,attr:{title:file.path}});link.addEventListener('click',()=>this.plugin.openFile(file.path));const status=this.app.metadataCache.getFileCache(file)?.frontmatter?.status;if(status)row.createSpan({cls:'prism-badge',text:String(status)});button(row,'浮动显示','layers',()=>void this.plugin.floats.open(file),'prism-icon-only');}
     if(files.length>8)button(section,`查看全部 ${files.length} 篇`,'arrow-up-right',()=>new FilteredNotes(this.plugin,files,title).open());
+  }
+  private createdNotesSection(parent:HTMLElement,createdFiles:TFile[],modifiedFiles:TFile[]):void{
+    const now=Date.now();
+    if(this.createdNonEmptyOnly){const nonEmpty=(file:TFile)=>file.stat.size>0;createdFiles=createdFiles.filter(nonEmpty);modifiedFiles=modifiedFiles.filter(nonEmpty);}
+    const createdGroups=([
+      ['today','今天创建','sun'],['week','近七天创建','calendar-days'],['month','近一月创建','calendar-range']
+    ] as const).map(([range,label,name])=>({range,label,name,files:createdFiles.filter(file=>inCreatedNoteRange(file.stat.ctime,range,now))}));
+    const createdCount=createdGroups.find(group=>group.range==='month')?.files.length||0;
+    const section=this.homeSection(parent,'最近创作动态','history',`近 30 天创建 ${createdCount} 篇 · 修改 ${modifiedFiles.length} 篇`);
+    section.dataset.prismWidget='createdNotes';section.addClass('prism-created-notes','prism-home-wide');
+    const latest=createdFiles[0],latestModified=modifiedFiles[0];
+    if(!latest&&!latestModified){empty(section,'知识库还没有可展示的创建或修改记录。','file-clock');return;}
+    const spotlight=section.createDiv({cls:'prism-created-spotlight'});
+    if(latest){
+      const featured=spotlight.createDiv({cls:'prism-created-feature'});const mark=featured.createDiv({cls:'prism-created-feature-mark'});icon(mark,'sparkles');
+      const content=featured.createDiv({cls:'prism-created-feature-content'});content.createSpan({cls:'prism-created-eyebrow',text:'最近创建'});
+      const link=content.createEl('button',{cls:'prism-created-feature-link',text:latest.basename,attr:{type:'button',title:latest.path,'aria-label':`打开最近创建的笔记：${latest.basename}`}});link.addEventListener('click',()=>this.plugin.openFile(latest.path));
+      content.createSpan({cls:'prism-created-feature-meta',text:`创建于 ${this.createdTime(latest.stat.ctime)} · ${latest.path}`});button(featured,'浮动显示','layers',()=>void this.plugin.floats.open(latest),'prism-icon-only');
+    }
+    if(latestModified){
+      const featured=spotlight.createDiv({cls:'prism-created-feature prism-modified-feature'});const mark=featured.createDiv({cls:'prism-created-feature-mark'});icon(mark,'pencil');
+      const content=featured.createDiv({cls:'prism-created-feature-content'});content.createSpan({cls:'prism-created-eyebrow',text:'最近修改'});
+      const link=content.createEl('button',{cls:'prism-created-feature-link',text:latestModified.basename,attr:{type:'button',title:latestModified.path,'aria-label':`打开最近修改的笔记：${latestModified.basename}`}});link.addEventListener('click',()=>this.plugin.openFile(latestModified.path));
+      content.createSpan({cls:'prism-created-feature-meta',text:`修改于 ${this.createdTime(latestModified.stat.mtime)} · ${latestModified.path}`});button(featured,'浮动显示','layers',()=>void this.plugin.floats.open(latestModified),'prism-icon-only');
+    }
+    const views=[...createdGroups,{range:'modified' as const,label:'最近修改',name:'pencil',files:modifiedFiles}];
+    const active=views.find(view=>view.range===this.createdView)||views[0];
+    const toolbar=section.createDiv({cls:'prism-created-toolbar'});
+    const tabs=toolbar.createDiv({cls:'prism-created-tabs',attr:{role:'tablist','aria-label':'创作动态时间范围'}});
+    for(const view of views){const b=button(tabs,`${view.label} ${view.files.length}`,view.name,()=>{this.createdView=view.range;this.render();},this.createdView===view.range?'is-active':'');b.setAttribute('aria-pressed',String(this.createdView===view.range));}
+    const toggle=toolbar.createEl('label',{cls:'prism-created-filter'});const checkbox=toggle.createEl('input',{attr:{type:'checkbox','aria-label':'只显示非空笔记'}});checkbox.checked=this.createdNonEmptyOnly;
+    toggle.createSpan({text:'只显示非空笔记'});checkbox.addEventListener('change',()=>{this.createdNonEmptyOnly=checkbox.checked;this.render();});
+    const weight=(file:TFile)=>{const stats=this.plugin.data.fileStats[file.path];return (stats?.opens||0)+(stats?.edits||0);};
+    const maxWeight=Math.max(...active.files.map(weight),0);
+    const grid=section.createDiv({cls:`prism-chip-grid ${active.range==='modified'?'is-modified':''}`});
+    if(!active.files.length)grid.createDiv({cls:'prism-created-empty',text:active.range==='modified'?'最近没有改动记录':'该时间段暂无创建记录'});
+    for(const file of active.files.slice(0,60)){
+      const value=weight(file),level=activityLevel(value,maxWeight),stats=this.plugin.data.fileStats[file.path];
+      const chip=grid.createEl('button',{cls:`prism-note-chip level-${level}`,attr:{type:'button',title:`${file.path}\n打开 ${stats?.opens||0} 次 · 编辑 ${stats?.edits||0} 次`,'aria-label':`打开笔记：${file.basename}`}});
+      chip.createSpan({cls:'prism-note-chip-name',text:file.basename});
+      if(value>0)chip.createSpan({cls:'prism-note-chip-count',text:String(value)});
+      chip.addEventListener('click',()=>this.plugin.openFile(file.path));
+    }
+    if(active.files.length>60)button(section,`查看全部 ${active.files.length} 篇`,'arrow-up-right',()=>new FilteredNotes(this.plugin,active.files,active.label).open(),'prism-created-more');
+  }
+  private createdTime(timestamp:number,timeOnly=false):string{
+    const date=new Date(timestamp),time=`${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+    return timeOnly?time:`${localDay(date)} ${time}`;
   }
   private miniHeatmap(parent:HTMLElement):void{const heat=parent.createDiv({cls:'prism-mini-heatmap'});for(const day of heatmapDays().slice(-84)){const value=score(this.plugin.data.activity[day]||emptyActivity());const cell=heat.createEl('button',{cls:`prism-heat-cell level-${this.level(value,10)}`,attr:{title:`${day} · ${value.toFixed(1)} 分`,'aria-label':`${day}，贡献 ${value.toFixed(1)} 分`}});cell.addEventListener('click',()=>{this.selectedDay=day;this.selectTab('pulse');});}}
   private level(value:number,max:number):number{return value<=0?0:Math.min(4,Math.max(1,Math.ceil(value/(max||1)*4)));}

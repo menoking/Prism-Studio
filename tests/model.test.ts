@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, HOME_WIDGETS, normalizeHomeWidgets, Task, completeTask, emptyActivity, filterTasks, heatmapDays, isToday, localDay, markdownTaskLines, metricValue, normalizeData, sanitizeFolder, score, streaks, wordDelta } from '../src/model';
+import { DEFAULT_SETTINGS, HOME_WIDGETS, activityLevel, createdNoteAgeDays, inCreatedNoteRange, hasSubstantiveModification, normalizeHomeWidgets, Task, completeTask, emptyActivity, filterTasks, heatmapDays, isToday, localDay, markdownTaskLines, metricValue, normalizeData, sanitizeFolder, score, streaks, wordDelta } from '../src/model';
 const task=(values:Partial<Task>={}):Task=>({id:'one',title:'Read',description:'',lane:'inbox',priority:'none',projectId:'',sprintId:'',due:'',notePath:'',createdAt:1,inProgress:false,...values});
 test('image fitting defaults to natural proportions and preserves the saved cover choice',()=>{
   assert.equal(normalizeData(null).settings.imageFit,'natural');
@@ -28,6 +28,31 @@ test('hidden workbench components survive reload while tasks, appearance and act
 });
 test('uses local calendar dates rather than UTC dates',()=>{
   const date=new Date(2026,9,4,0,5);assert.equal(localDay(date),'2026-10-04');
+});
+test('created notes use cumulative local calendar ranges',()=>{
+  const now=new Date(2026,9,11,12).getTime();
+  const at=(days:number,hour=9)=>new Date(2026,9,11-days,hour).getTime();
+  assert.equal(createdNoteAgeDays(at(0),now),0);assert.equal(createdNoteAgeDays(at(30),now),30);
+  assert.equal(createdNoteAgeDays(at(-1),now),null);assert.equal(createdNoteAgeDays(0,now),null);
+  assert.equal(inCreatedNoteRange(at(0),'today',now),true);assert.equal(inCreatedNoteRange(at(1),'today',now),false);
+  assert.equal(inCreatedNoteRange(at(0),'week',now),true);assert.equal(inCreatedNoteRange(at(7),'week',now),true);assert.equal(inCreatedNoteRange(at(8),'week',now),false);
+  assert.equal(inCreatedNoteRange(at(0),'month',now),true);assert.equal(inCreatedNoteRange(at(7),'month',now),true);assert.equal(inCreatedNoteRange(at(30),'month',now),true);assert.equal(inCreatedNoteRange(at(31),'month',now),false);
+});
+test('modification detection separates edited files from newly created files',()=>{
+  assert.equal(hasSubstantiveModification(10_000,1_000),true);
+  assert.equal(hasSubstantiveModification(10_000,9_500),false);
+  assert.equal(hasSubstantiveModification(10_000,0),false);assert.equal(hasSubstantiveModification(Number.NaN,1_000),false);
+});
+test('file stats migrate safely and sanitize malformed values',()=>{
+  assert.deepEqual(normalizeData(null).fileStats,{});
+  const data=normalizeData({fileStats:{'a.md':{opens:3.9,edits:2,lastOpened:100,lastEdited:50},'b.md':{opens:-2,edits:Number.NaN,lastOpened:-5,lastEdited:0} as never,'c.md':null as never}});
+  assert.deepEqual(data.fileStats['a.md'],{opens:3,edits:2,lastOpened:100,lastEdited:50});
+  assert.deepEqual(data.fileStats['b.md'],{opens:0,edits:0,lastOpened:0,lastEdited:0});assert.equal(data.fileStats['c.md'],undefined);
+});
+test('activity level scales intensity and guards invalid input',()=>{
+  assert.equal(activityLevel(0,10),0);assert.equal(activityLevel(1,10),1);
+  assert.equal(activityLevel(5,10),2);assert.equal(activityLevel(8,10),4);assert.equal(activityLevel(100,10),4);
+  assert.equal(activityLevel(3,0),0);assert.equal(activityLevel(Number.NaN,10),0);
 });
 test('today includes overdue actionable tasks and excludes deferred and completed tasks',()=>{
   assert.equal(isToday(task({due:'2026-10-02'}),'2026-10-04'),true);
@@ -76,7 +101,7 @@ test('Markdown import ignores checkbox examples inside fenced code blocks',()=>{
 test('settings normalize bounds and paths without traversal',()=>{
   assert.equal(sanitizeFolder('../../Prism/../Inbox'),'Prism/Inbox');
   const data=normalizeData({settings:{...DEFAULT_SETTINGS,fontSize:999,blur:NaN,captureFolder:'../../Inbox'}});
-  assert.equal(data.settings.fontSize,24);assert.equal(data.settings.blur,20);assert.equal(data.settings.captureFolder,'Inbox');
+  assert.equal(data.settings.fontSize,48);assert.equal(data.settings.blur,20);assert.equal(data.settings.captureFolder,'Inbox');
   assert.equal(normalizeData(null).tasks.length,0);
 });
 test('upgrades legacy glass defaults while preserving customized sliders and task data',()=>{

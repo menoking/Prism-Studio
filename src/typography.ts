@@ -45,6 +45,12 @@ export function fontFaceRules(resource:(file:string)=>string):string {
 export function noteFontFamily(font:NoteFont,mono:boolean):string {
   return font==='default'?(mono?'"Cascadia Code", "SFMono-Regular", "Consolas", monospace':'var(--font-text, "Segoe UI", sans-serif)'):NOTE_FONTS[font].family;
 }
+export const NOTE_FONT_SIZE_MIN=10;
+export const NOTE_FONT_SIZE_MAX=48;
+export function adjustNoteFontSize(size:number,deltaY:number):number {
+  if(!Number.isFinite(deltaY) || deltaY===0)return size;
+  return Math.max(NOTE_FONT_SIZE_MIN,Math.min(NOTE_FONT_SIZE_MAX,size+(deltaY<0?1:-1)));
+}
 export function uiScale(size:number):number {return size===0?1:size/13;}
 export function typographyRules(s:{uiFont:UIFont;uiFontSize:number;noteFont:NoteFont;mono:boolean}):string {
   const ui=UI_FONTS[s.uiFont].family,note=noteFontFamily(s.noteFont,s.mono);
