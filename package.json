@@ -1,6 +1,6 @@
 {
   "name": "obsidian-prism-studio",
-  "version": "1.6.1",
+  "version": "1.6.0",
   "private": true,
   "description": "Translucent themes, reading enhancements, tasks and a workspace for Obsidian.",
   "scripts": {
