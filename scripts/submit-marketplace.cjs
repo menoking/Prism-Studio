@@ -17,7 +17,8 @@ const run = (cmd, args, cwd) => {
 
 if (!fs.existsSync(workDir)) run('git', ['clone', `git@github.com:${owner}/obsidian-releases.git`, workDir]);
 
-run('git', ['remote', 'set-url', 'upstream', 'https://github.com/obsidianmd/obsidian-releases.git'], workDir);
+spawnSync('git', ['remote', 'add', 'upstream', 'https://github.com/obsidianmd/obsidian-releases.git'], { cwd: workDir });
+spawnSync('git', ['remote', 'set-url', 'upstream', 'https://github.com/obsidianmd/obsidian-releases.git'], { cwd: workDir });
 run('git', ['fetch', 'upstream', 'master'], workDir);
 run('git', ['checkout', '-B', branch, 'upstream/master'], workDir);
 
