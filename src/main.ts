@@ -388,14 +388,14 @@ class PrismSettings extends PluginSettingTab {
       swatch.style.background=palette.gradient?`linear-gradient(135deg,rgb(${palette.tint}),rgb(${palette.secondary}),rgb(${palette.tertiary}))`:`rgb(${palette.tint})`;
       button.createSpan({text:palette.name});button.addEventListener('click',()=>void choosePalette(key));paletteButtons.set(key,button);
     }
-    const materialStatus=()=>this.plugin.data.settings.material==='solid'?'当前为纯色质感，桌面透视暂停；切回透明质感会按开关恢复。':this.plugin.glass.status.get(el.ownerDocument)||'原生玻璃已关闭，使用知识库背景或主题底色。';
+    const materialStatus=()=>this.plugin.data.settings.material==='solid'?'当前为纯色质感，桌面透视暂停；切回透明质感会按开关恢复。':this.plugin.glass.status.get(el.ownerDocument)||'桌面透视未启用，使用知识库背景或主题底色。';
     const status=el.createEl('p',{text:materialStatus(),cls:'setting-item-description prism-glass-status'});
     new Setting(el).setName('界面质感').setDesc('玻璃通透轻盈；亚克力浓色柔润；毛玻璃乳白磨砂；柔焦轻染色、强模糊；纯色不透明。').addDropdown(c=>c.addOptions(MATERIAL_OPTIONS).setValue(s.material).onChange(async v=>{await this.plugin.updateSettings({material:v as typeof s.material});status.setText(materialStatus());}));
     const preview=el.createDiv({cls:'prism-material-preview',attr:{'aria-label':'材质预览'}});
     preview.createDiv({cls:'prism-material-preview-background',text:'Aa · 01 · 阅读'});
     const sample=preview.createDiv({cls:'prism-material-preview-surface'});sample.createEl('strong',{text:'材质预览'});sample.createEl('span',{text:'切换质感，观察透光、雾面与颗粒。'});
     new Setting(el).setName('重置玻璃参数').setDesc('恢复默认染色、不透明度与模糊。保留当前配色、字号、任务与统计。').addButton(c=>c.setButtonText('重置参数').onClick(async()=>{await this.plugin.restoreGlass();this.display();}));
-    new Setting(el).setName('原生桌面玻璃').setDesc('透明质感在 Windows 11 22H2+ 共用系统 Acrylic，macOS 共用原生玻璃；质感差异作用于 UI 面板，桌面模糊由 OS 控制。纯色模式暂停透视。').addToggle(c=>c.setValue(s.nativeGlass).onChange(async v=>{await this.plugin.updateSettings({nativeGlass:v});this.display();}));
+    new Setting(el).setName('原生桌面玻璃').setDesc('开启后，若 Obsidian 窗口本身已处于半透明状态，界面继续透出桌面；否则沿用 CSS 面板质感与知识库背景图片。纯色模式暂停透视。').addToggle(c=>c.setValue(s.nativeGlass).onChange(async v=>{await this.plugin.updateSettings({nativeGlass:v});this.display();}));
     const sliders:[keyof typeof s,string,number,number,number][]=[['intensity','背景染色强度',0,100,5],['opacity','面板不透明度（磨砂质感保留基础雾感）',15,100,5],['blur','面板模糊强度（磨砂质感保留基础模糊）',0,40,2],['radius','面板圆角',0,24,1]];
     for(const [key,label,min,max,step] of sliders)new Setting(el).setName(label).addSlider(c=>c.setLimits(min,max,step).setValue(s[key] as number).setDynamicTooltip().onChange(v=>void this.plugin.updateSettings({[key]:v})));
     this.typography(el);
