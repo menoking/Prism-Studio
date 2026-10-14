@@ -1,3 +1,14 @@
+# Prism Studio 1.6.1
+
+为 Obsidian 提供透明主题、阅读增强与内容工作台。
+
+- 修复社区市场自动审核的阻断项：浮动窗口改用移除内联样式 + CSS 类控制最小化高度与旋转复位，不再直接赋静态样式。
+- 设置面板标题改用官方 `Setting.setHeading()`，工作台启动不再使用高于 minAppVersion 的 `setActiveLeaf` 参数。
+- manifest 描述结尾改为英文句点；README 补充英文简介，便于英文目录展示。
+- 功能与外观均无变化。
+
+---
+
 # Prism Studio 1.6.0
 
 为 Obsidian 提供透明主题、阅读增强与内容工作台。

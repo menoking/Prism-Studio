@@ -228,7 +228,7 @@ export default class PrismPlugin extends Plugin {
   async openStudio(tab:'home'|'tasks'|'pulse'):Promise<void>{
     let leaf=this.app.workspace.getLeavesOfType(STUDIO_VIEW)[0];
     if(!leaf){leaf=this.app.workspace.getLeaf('tab');await leaf.setViewState({type:STUDIO_VIEW,active:true,state:{tab}});}
-    await this.app.workspace.revealLeaf(leaf);this.app.workspace.setActiveLeaf(leaf,{focus:true});if(leaf.view instanceof StudioView)leaf.view.selectTab(tab);
+    await this.app.workspace.revealLeaf(leaf);this.app.workspace.setActiveLeaf(leaf);if(leaf.view instanceof StudioView)leaf.view.selectTab(tab);
   }
   newTask(lane:Lane='inbox'):TaskModal {const modal=new TaskModal(this,undefined,lane);modal.open();return modal;}
   editTask(task:Task):TaskModal {const modal=new TaskModal(this,task);modal.open();return modal;}
@@ -369,7 +369,7 @@ export default class PrismPlugin extends Plugin {
 class PrismSettings extends PluginSettingTab {
   constructor(app:App,private plugin:PrismPlugin){super(app,plugin);}
   display():void{
-    const el=this.containerEl;this.plugin.applySkin(el.ownerDocument);el.empty();el.createEl('h2',{text:'Prism Studio'});
+    const el=this.containerEl;this.plugin.applySkin(el.ownerDocument);el.empty();new Setting(el).setName('Prism Studio').setHeading();
     el.createEl('p',{text:'配色与质感可独立搭配。按钮、滚动条与浮动笔记跟随配色。任务和统计保存在本插件的 data.json 中。',cls:'setting-item-description'});
     const s=this.plugin.data.settings;
     new Setting(el).setName('全局柔光皮肤').setDesc('应用到编辑器、文件列表、标签页和原生窗口。').addToggle(c=>c.setValue(s.enabled).onChange(v=>void this.plugin.updateSettings({enabled:v})));
@@ -410,13 +410,13 @@ class PrismSettings extends PluginSettingTab {
     new Setting(el).setName('快速收集目录').addText(c=>c.setValue(s.captureFolder).onChange(v=>void this.plugin.updateSettings({captureFolder:v})));
     new Setting(el).setName('日记目录').addText(c=>c.setValue(s.dailyFolder).onChange(v=>void this.plugin.updateSettings({dailyFolder:v})));
     new Setting(el).setName('恢复皮肤默认设置').setDesc('保留任务、项目和活动记录。').addButton(c=>c.setButtonText('恢复默认').onClick(async()=>{await this.plugin.updateSettings(DEFAULT_SETTINGS);this.display();}));
-    el.createEl('h3',{text:'快捷入口'});
+    new Setting(el).setName('快捷入口').setHeading();
     new Setting(el).setName('任务与项目').addButton(c=>c.setButtonText('打开任务').onClick(()=>void this.plugin.openStudio('tasks'))).addButton(c=>c.setButtonText('管理项目').onClick(()=>this.plugin.manage('projects')));
     new Setting(el).setName('Markdown 任务').addButton(c=>c.setButtonText('导出任务').onClick(()=>void this.plugin.exportTasks()));
   }
   private typography(el:HTMLElement):void {
     const section=el.createDiv({cls:'prism-typography-settings'});
-    section.createEl('h3',{text:'字体与排版'});
+    new Setting(section).setName('字体与排版').setHeading();
     section.createEl('p',{text:'界面与笔记分别设置，内置字体可离线使用。保持默认即可沿用当前字体与界面字号。',cls:'setting-item-description'});
     let uiPreview:HTMLElement,notePreview:HTMLElement,monoToggle:import('obsidian').ToggleComponent;
     let uiDropdown:DropdownComponent,noteDropdown:DropdownComponent;

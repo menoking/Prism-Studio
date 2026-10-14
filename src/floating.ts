@@ -41,7 +41,7 @@ export class FloatingNotes{
     component.register(()=>note.dragCleanup?.());
     this.activate(note);await this.render(note);el.focus();
   }
-  private activate(note:FloatingNote):void{for(const other of this.notes)other.el.removeClass('is-front');note.el.addClass('is-front');note.el.style.zIndex=String(++this.z);note.el.style.transform='none';}
+  private activate(note:FloatingNote):void{for(const other of this.notes)other.el.removeClass('is-front');note.el.addClass('is-front');note.el.style.zIndex=String(++this.z);note.el.style.removeProperty('transform');}
   private async render(note:FloatingNote):Promise<void>{
     const generation=++note.generation;
     try{
@@ -80,7 +80,7 @@ export class FloatingNotes{
     const count=this.notes.length;if(!count){new Notice('先通过笔记命令或工作台打开浮动笔记。');return;}
     this.notes.forEach((note,index)=>{const win=note.el.ownerDocument.defaultView||window;const width=Math.min(620,win.innerWidth-64),height=Math.min(720,win.innerHeight-100),offset=(index-(count-1)/2)*16;note.el.style.width=`${width}px`;note.el.style.height=`${height}px`;note.el.style.left=`${Math.max(16,(win.innerWidth-width)/2+offset)}px`;note.el.style.top=`${Math.max(32,(win.innerHeight-height)/2+offset)}px`;note.minimized=false;note.el.removeClass('is-minimized');note.height=`${height}px`;note.el.style.zIndex=String(++this.z);note.el.style.transform=`rotate(${index===count-1?0:(index%2===0?-1:1)}deg)`;});this.activate(this.notes[count-1]);
   }
-  private minimize(note:FloatingNote):void{note.minimized=!note.minimized;if(note.minimized){note.height=note.el.style.height;note.el.style.height='48px';}else note.el.style.height=note.height;note.el.classList.toggle('is-minimized',note.minimized);this.clamp(note);}
+  private minimize(note:FloatingNote):void{note.minimized=!note.minimized;if(note.minimized){note.height=note.el.style.height;note.el.style.removeProperty('height');}else note.el.style.height=note.height;note.el.classList.toggle('is-minimized',note.minimized);this.clamp(note);}
   private startDrag(note:FloatingNote,event:PointerEvent):void{
     if(event.button!==0 || (event.target as HTMLElement).closest('button'))return;
     event.preventDefault();this.activate(note);note.dragCleanup?.();const win=note.el.ownerDocument.defaultView||window;

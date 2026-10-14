@@ -314,7 +314,7 @@ button.prism-stat:hover { border-color: var(--prism-accent); background: var(--p
 .prism-note-preview .mermaid svg { max-width: 100% !important; height: auto !important; }
 .prism-note-preview .math-block, .prism-note-preview pre { max-width: 100%; overflow-x: auto; }
 .prism-note-preview pre, .prism-note-preview blockquote { background: var(--prism-glass); border-radius: 8px; padding: 14px; box-shadow: var(--prism-shadow); }
-.prism-floating.is-minimized { min-height: 48px; resize: none; }.is-minimized .prism-floating-body { display: none; }
+.prism-floating.is-minimized { height: 48px; min-height: 48px; resize: none; }.is-minimized .prism-floating-body { display: none; }
 .is-editing .prism-floating-body { display: flex; flex-direction: column; padding: 12px !important; }
 .prism-floating-edit-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: calc(10px * var(--prism-ui-scale, 1)); color: var(--prism-muted); margin-bottom: 10px; }
 .prism-floating-editor { width: 100%; flex: 1; min-height: 100px; padding: 12px; resize: none; background: var(--prism-soft); color: var(--prism-ink); border: 1px solid var(--prism-line); font-family: var(--font-monospace); font-size: 13px; line-height: 1.8; }

@@ -1,5 +1,21 @@
 # Prism Studio
 
+English · [中文说明见下](#中文说明)
+
+Prism Studio is an Obsidian plugin that gives your workspace a translucent, light-on-the-eyes look and turns it into a working hub: **18 palettes, 5 materials, separate interface and note fonts**, a section scrollbar, automatic image decks, floating notes, and a customizable home dashboard.
+
+- **Appearance** — Palettes and materials mix freely in light and dark mode. Panels keep a soft blur, and the desktop window can ride on system translucency where available.
+- **Reading** — A section rail shows ticks, headings and hover previews; consecutive images stack into decks that expand or collapse.
+- **Floating notes** — Open any note in a movable window, edit with drafts and recovery, and pop out to a native window on desktop.
+- **Workbench** — Tasks in a five-lane board, projects and sprints, a contribution heatmap, recents by creation time and modification, and per-widget visibility settings.
+- **Local only** — All data stays in your vault (`data.json`). No network requests, no telemetry.
+
+Install from **Settings → Community plugins → Browse → Prism Studio**, or download the latest release from [GitHub](https://github.com/menoking/Prism-Studio/releases/latest). MIT licensed.
+
+---
+
+## 中文说明
+
 让 Obsidian 的阅读与工作空间更轻盈。
 
 Prism Studio 提供 **18 套配色、5 种材质、独立的界面与笔记字体**，并加入章节滚动条、自动图片堆叠、浮动笔记与可定制工作台。配色与材质可以自由搭配，支持浅色和深色模式。
