@@ -1,3 +1,14 @@
+# Prism Studio 1.6.2
+
+为 Obsidian 提供透明主题、阅读增强与内容工作台。
+
+- 修复社区市场自动审核的剩余阻断项：设置页标题不再包含插件名，工作台启动用的 `Workspace.revealLeaf` 要求 Obsidian 1.7.2，`minAppVersion` 已同步上调。
+- 源码告警清理：错误类型断言、`any` 传入类型化参数、`document.createElement` 改用 Obsidian `createEl`/`createDiv`/`createSpan`、`Vault.trash` 改用 `FileManager.trashFile`、控制字符正则改为字符过滤、浮动窗口移除未使用的图标导入。
+- 发布流程补齐构建溯源证明（artifact attestation），Release 只上传 Obsidian 支持的 `main.js`、`manifest.json`、`styles.css`。
+- 功能、外观与交互均无变化。
+
+---
+
 # Prism Studio 1.6.1
 
 为 Obsidian 提供透明主题、阅读增强与内容工作台。

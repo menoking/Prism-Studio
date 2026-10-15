@@ -1,7 +1,7 @@
 import { Component, MarkdownRenderer, Notice, Platform, TFile } from 'obsidian';
 import type PrismPlugin from './main';
 import { ConfirmModal } from './modals';
-import { button, icon } from './ui';
+import { button } from './ui';
 
 interface FloatingNote {
   file:TFile;el:HTMLElement;inner:HTMLElement;body:HTMLElement;title:HTMLElement;
@@ -16,7 +16,7 @@ export class FloatingNotes{
     const existing=this.notes.find(n=>n.file.path===file.path && n.el.ownerDocument===doc);
     if(existing){if(existing.minimized)this.minimize(existing);this.activate(existing);return;}
     const win=doc.defaultView||window;
-    const el=doc.createElement('section');el.className='prism-floating';el.setAttribute('role','dialog');el.setAttribute('aria-label',`浮动笔记：${file.basename}`);el.tabIndex=-1;
+    const el=doc.createEl('section',{cls:'prism-floating'});el.setAttribute('role','dialog');el.setAttribute('aria-label',`浮动笔记：${file.basename}`);el.tabIndex=-1;
     const offset=this.notes.length%5*24,width=Math.min(660,win.innerWidth-32),height=Math.min(760,win.innerHeight-80);
     el.style.width=`${width}px`;el.style.height=`${height}px`;el.style.left=`${Math.max(16,(win.innerWidth-width)/2+offset)}px`;el.style.top=`${Math.max(32,(win.innerHeight-height)/2+offset)}px`;
     doc.body.appendChild(el);const inner=el.createDiv({cls:'prism-floating-inner'});const header=inner.createDiv({cls:'prism-floating-header',attr:{tabindex:'0','aria-label':'拖动浮动笔记。方向键可移动。'}});

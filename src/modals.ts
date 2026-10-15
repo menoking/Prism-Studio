@@ -26,7 +26,7 @@ export class HomeLayoutModal extends Modal {
       });
     }
     const actions=el.createDiv({cls:'prism-modal-actions'});
-    button(actions,'显示全部','rotate-ccw',async()=>{await this.plugin.updateSettings({homeWidgets:normalizeHomeWidgets(undefined)});this.onOpen();});
+    button(actions,'显示全部','rotate-ccw',()=>{void this.plugin.updateSettings({homeWidgets:normalizeHomeWidgets(undefined)}).then(()=>this.onOpen());});
     button(actions,'完成','check',()=>this.close(),'prism-primary');
   }
 }

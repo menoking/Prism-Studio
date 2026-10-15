@@ -59,7 +59,7 @@ export class WindowPin {
       if([...state.buttons].some(button=>button.parentElement===controls))continue;
       const minimize=controls.querySelector('.titlebar-button.mod-minimize');
       if(!minimize&&!controls.querySelector('.titlebar-button.mod-close'))continue;
-      const button=doc.createElement('div');button.className='titlebar-button prism-window-pin';
+      const button=doc.createDiv({cls:'titlebar-button prism-window-pin'});
       button.setAttribute('role','button');button.tabIndex=0;setIcon(button,'pin');
       button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();this.toggle(doc);});
       button.addEventListener('dblclick',event=>{event.preventDefault();event.stopPropagation();});

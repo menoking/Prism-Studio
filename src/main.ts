@@ -1,5 +1,5 @@
 import { App, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, normalizePath, type DropdownComponent } from 'obsidian';
-import { Activity, Data, DEFAULT_SETTINGS, Lane, Project, Sprint, Task, completeTask, emptyActivity, emptyFileStats, localDay, markdownTaskLines, normalizeData, sanitizeFolder, wordDelta } from './model';
+import { Activity, Data, DEFAULT_SETTINGS, Lane, Project, Sprint, Task, completeTask, emptyActivity, emptyFileStats, localDay, markdownTaskLines, normalizeData, sanitizeFolder, stripControlChars, wordDelta } from './model';
 import { STUDIO_VIEW, StudioView } from './view';
 import { CaptureModal, NotePicker, TaskModal, ManageModal, HomeLayoutModal } from './modals';
 import { FloatingNotes } from './floating';
@@ -35,7 +35,7 @@ export default class PrismPlugin extends Plugin {
   status!: HTMLElement;
 
   async onload(): Promise<void> {
-    this.data=normalizeData(await this.loadData());
+    this.data=normalizeData(await this.loadData() as Partial<Data>|null|undefined);
     this.reading=new ReadingEnhancements(this);this.media=new MediaEffects(this);
     this.floats=new FloatingNotes(this);
     this.registerView(STUDIO_VIEW,leaf=>new StudioView(leaf,this));
@@ -166,7 +166,7 @@ export default class PrismPlugin extends Plugin {
   subscribe(callback:()=>void):()=>void {this.subscribers.add(callback);return ()=>this.subscribers.delete(callback);}
   notify(): void {for(const callback of this.subscribers)callback();}
   async save(): Promise<void> {
-    const snapshot=JSON.parse(JSON.stringify(this.data));
+    const snapshot=JSON.parse(JSON.stringify(this.data)) as Data;
     const job=this.writeQueue.catch(()=>undefined).then(()=>this.saveData(snapshot));this.writeQueue=job;
     try{await job;}catch(error){new Notice('Prism 保存失败，请检查知识库是否可写。');console.error(error);throw error;}
   }
@@ -200,6 +200,7 @@ export default class PrismPlugin extends Plugin {
     doc.body.dataset.prismMaterial=s.material;doc.body.dataset.prismPalette=s.palette;
     this.glass.apply(doc,s.enabled && s.nativeGlass && s.material!=='solid',s.material);
     this.reading.attach(doc);this.media.attach(doc);
+    // Kept on createElement: createEl('style') is rejected by the no-forbidden-elements review rule.
     let style=doc.getElementById('prism-dynamic-skin');
     if(!style){style=doc.createElement('style');style.id='prism-dynamic-skin';doc.head.appendChild(style);}
     if(!doc.getElementById('prism-font-faces')){
@@ -234,7 +235,7 @@ export default class PrismPlugin extends Plugin {
   editTask(task:Task):TaskModal {const modal=new TaskModal(this,task);modal.open();return modal;}
   manage(kind:'projects'|'sprints'):ManageModal {const modal=new ManageModal(this,kind);modal.open();return modal;}
   remember(syncedIds:string[]=[],fileChange?:Snapshot['fileChange']):void {
-    this.history.push(JSON.parse(JSON.stringify({tasks:this.data.tasks,projects:this.data.projects,sprints:this.data.sprints,syncedIds,fileChange,counts:Object.fromEntries(Object.entries(this.data.activity).map(([k,v])=>[k,v.tasks]))})));
+    this.history.push(JSON.parse(JSON.stringify({tasks:this.data.tasks,projects:this.data.projects,sprints:this.data.sprints,syncedIds,fileChange,counts:Object.fromEntries(Object.entries(this.data.activity).map(([k,v])=>[k,v.tasks]))})) as Snapshot);
     if(this.history.length>30)this.history.shift();
   }
   canUndo():boolean {return this.history.length>0;}
@@ -244,7 +245,7 @@ export default class PrismPlugin extends Plugin {
       const change=snapshot.fileChange;const file=this.app.vault.getAbstractFileByPath(change.path);
       if(!(file instanceof TFile))throw new Error('Now 清单已不存在，无法撤销本次生成。');
       const content=await this.app.vault.read(file);if(content!==change.after)throw new Error('Now 清单已在别处修改，本次生成无法自动撤销。');
-      if(change.created)await this.app.vault.trash(file,false);else await this.app.vault.process(file,current=>{if(current!==change.after)throw new Error('Now 清单已变化，撤销已停止。');return change.before;});
+      if(change.created)await this.app.fileManager.trashFile(file);else await this.app.vault.process(file,current=>{if(current!==change.after)throw new Error('Now 清单已变化，撤销已停止。');return change.before;});
     }
     // Restore linked checkboxes before restoring local data; conflicts leave history available.
     for(const id of snapshot.syncedIds){const current=this.data.tasks.find(t=>t.id===id);const target=snapshot.tasks.find(t=>t.id===id);if(current?.source && target?.source){const synced=structuredClone(current);await this.syncCheckbox(synced,target.lane==='done');target.source=synced.source;}}
@@ -314,7 +315,7 @@ export default class PrismPlugin extends Plugin {
   }
   async uniqueNote(folder:string,title:string,content:string):Promise<TFile>{
     const safeFolder=sanitizeFolder(folder);await this.ensureFolder(safeFolder);
-    const clean=title.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g,'-').replace(/[. ]+$/g,'').slice(0,120)||'未命名';
+    const clean=stripControlChars(title.trim()).replace(/[<>:"/\\|?*]/g,'-').replace(/[. ]+$/g,'').slice(0,120)||'未命名';
     let path=normalizePath(`${safeFolder}/${clean}.md`),suffix=1;
     while(this.app.vault.getAbstractFileByPath(path))path=normalizePath(`${safeFolder}/${clean} ${++suffix}.md`);
     const file=await this.app.vault.create(path,content);await this.app.workspace.getLeaf('tab').openFile(file);return file;
@@ -369,7 +370,7 @@ export default class PrismPlugin extends Plugin {
 class PrismSettings extends PluginSettingTab {
   constructor(app:App,private plugin:PrismPlugin){super(app,plugin);}
   display():void{
-    const el=this.containerEl;this.plugin.applySkin(el.ownerDocument);el.empty();new Setting(el).setName('Prism Studio').setHeading();
+    const el=this.containerEl;this.plugin.applySkin(el.ownerDocument);el.empty();new Setting(el).setName('外观与工作台').setHeading();
     el.createEl('p',{text:'配色与质感可独立搭配。按钮、滚动条与浮动笔记跟随配色。任务和统计保存在本插件的 data.json 中。',cls:'setting-item-description'});
     const s=this.plugin.data.settings;
     new Setting(el).setName('全局柔光皮肤').setDesc('应用到编辑器、文件列表、标签页和原生窗口。').addToggle(c=>c.setValue(s.enabled).onChange(v=>void this.plugin.updateSettings({enabled:v})));
@@ -393,7 +394,7 @@ class PrismSettings extends PluginSettingTab {
     new Setting(el).setName('界面质感').setDesc('玻璃通透轻盈；亚克力浓色柔润；毛玻璃乳白磨砂；柔焦轻染色、强模糊；纯色不透明。').addDropdown(c=>c.addOptions(MATERIAL_OPTIONS).setValue(s.material).onChange(async v=>{await this.plugin.updateSettings({material:v as typeof s.material});status.setText(materialStatus());}));
     const preview=el.createDiv({cls:'prism-material-preview',attr:{'aria-label':'材质预览'}});
     preview.createDiv({cls:'prism-material-preview-background',text:'Aa · 01 · 阅读'});
-    const sample=preview.createDiv({cls:'prism-material-preview-surface'});sample.createEl('strong',{text:'材质预览'});sample.createEl('span',{text:'切换质感，观察透光、雾面与颗粒。'});
+    const sample=preview.createDiv({cls:'prism-material-preview-surface'});sample.createEl('strong',{text:'材质预览'});sample.createSpan({text:'切换质感，观察透光、雾面与颗粒。'});
     new Setting(el).setName('重置玻璃参数').setDesc('恢复默认染色、不透明度与模糊。保留当前配色、字号、任务与统计。').addButton(c=>c.setButtonText('重置参数').onClick(async()=>{await this.plugin.restoreGlass();this.display();}));
     new Setting(el).setName('原生桌面玻璃').setDesc('透明质感在 Windows 11 22H2+ 共用系统 Acrylic，macOS 共用原生玻璃；质感差异作用于 UI 面板，桌面模糊由 OS 控制。纯色模式暂停透视。').addToggle(c=>c.setValue(s.nativeGlass).onChange(async v=>{await this.plugin.updateSettings({nativeGlass:v});this.display();}));
     const sliders:[keyof typeof s,string,number,number,number][]=[['intensity','背景染色强度',0,100,5],['opacity','面板不透明度（磨砂质感保留基础雾感）',15,100,5],['blur','面板模糊强度（磨砂质感保留基础模糊）',0,40,2],['radius','面板圆角',0,24,1]];

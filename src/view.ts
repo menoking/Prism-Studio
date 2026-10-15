@@ -170,7 +170,7 @@ export class StudioView extends ItemView{
   }
   private noteSection(parent:HTMLElement,title:string,name:string,files:TFile[],message:string,widget?:string):void{
     const section=this.homeSection(parent,title,name,`${files.length} 篇`);if(widget)section.dataset.prismWidget=widget;const list=section.createDiv({cls:'prism-note-list'});if(!files.length)empty(list,message,name);
-    for(const file of files.slice(0,8)){const row=list.createDiv({cls:'prism-note-row'});const link=row.createEl('button',{cls:'prism-note-link',text:file.basename,attr:{title:file.path}});link.addEventListener('click',()=>this.plugin.openFile(file.path));const status=this.app.metadataCache.getFileCache(file)?.frontmatter?.status;if(status)row.createSpan({cls:'prism-badge',text:String(status)});button(row,'浮动显示','layers',()=>void this.plugin.floats.open(file),'prism-icon-only');}
+    for(const file of files.slice(0,8)){const row=list.createDiv({cls:'prism-note-row'});const link=row.createEl('button',{cls:'prism-note-link',text:file.basename,attr:{title:file.path}});link.addEventListener('click',()=>this.plugin.openFile(file.path));const status=String(this.app.metadataCache.getFileCache(file)?.frontmatter?.status??'');if(status)row.createSpan({cls:'prism-badge',text:status});button(row,'浮动显示','layers',()=>void this.plugin.floats.open(file),'prism-icon-only');}
     if(files.length>8)button(section,`查看全部 ${files.length} 篇`,'arrow-up-right',()=>new FilteredNotes(this.plugin,files,title).open());
   }
   private createdNotesSection(parent:HTMLElement,createdFiles:TFile[],modifiedFiles:TFile[]):void{

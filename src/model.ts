@@ -92,9 +92,13 @@ export function emptyActivity(): Activity {
   return { notes: {}, tasks: 0, seconds: 0, focusSeconds: 0, sessions: 0, links: 0 };
 }
 export function isLane(value: unknown): value is Lane { return typeof value === 'string' && value in LANES; }
+// Replaces ASCII control characters without a control-character regex literal.
+export function stripControlChars(value: string): string {
+  return Array.from(value, ch => ch.charCodeAt(0) < 32 ? '-' : ch).join('');
+}
 export function sanitizeFolder(value: string): string {
   return value.trim().replace(/\\/g,'/').split('/').filter(p => p && p!=='.' && p!=='..')
-    .map(p => p.replace(/[<>:"|?*\u0000-\u001f]/g,'-')).join('/');
+    .map(p => stripControlChars(p).replace(/[<>:"|?*]/g,'-')).join('/');
 }
 export function normalizeData(raw: Partial<Data> | null | undefined): Data {
   const settings = {...DEFAULT_SETTINGS, ...raw?.settings};
@@ -136,7 +140,7 @@ export function normalizeData(raw: Partial<Data> | null | undefined): Data {
     }
   }
   return {
-    version: 1, settings, tasks: Array.isArray(raw?.tasks) ? raw.tasks.filter(t=>t && typeof t.id==='string' && typeof t.title==='string' && isLane(t.lane)).map(t=>Object.assign({description:'',due:'',projectId:'',sprintId:'',notePath:'',inProgress:false,priority:'none' as Priority,createdAt:Date.now()},t)) : [],
+    version: 1, settings, tasks: Array.isArray(raw?.tasks) ? raw.tasks.filter(t=>t && typeof t.id==='string' && typeof t.title==='string' && isLane(t.lane)).map(t=>Object.assign({description:'',due:'',projectId:'',sprintId:'',notePath:'',inProgress:false,priority:'none',createdAt:Date.now()},t)) : [],
     projects: Array.isArray(raw?.projects)?raw.projects:[], sprints: Array.isArray(raw?.sprints)?raw.sprints:[],
     activity: raw?.activity && typeof raw.activity==='object'?raw.activity:{},
     drafts: raw?.drafts && typeof raw.drafts==='object'?raw.drafts:{},

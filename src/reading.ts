@@ -143,7 +143,7 @@ export class ReadingEnhancements {
   }
   private schedule(doc:Document):void {
     const state=this.documents.get(doc);if(!state||state.timer||!doc.defaultView||doc.defaultView.closed)return;
-    state.timer=doc.defaultView!.setTimeout(()=>{state.timer=0;this.refresh();},120);
+    state.timer=doc.defaultView.setTimeout(()=>{state.timer=0;this.refresh();},120);
   }
   refresh():void {
     for(const [scroll,rail] of this.rails)if(!scroll.isConnected || !this.plugin.data.settings.readingRail){rail.destroy();this.rails.delete(scroll);}else rail.refresh();

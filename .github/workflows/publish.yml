@@ -5,6 +5,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 concurrency:
   group: prism-release
   cancel-in-progress: false
@@ -36,7 +38,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/package.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Compress-Archive -LiteralPath fonts -DestinationPath release/fonts.zip -Force
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
       - name: Publish current version
         shell: pwsh
         env:
@@ -44,7 +52,7 @@ jobs:
         run: |
           $version = (Get-Content manifest.json -Raw | ConvertFrom-Json).version
           Write-Host "Publishing version: $version"
-          $assets = @("release/prism-studio-$version.zip", 'release/fonts.zip', 'main.js', 'manifest.json', 'styles.css', 'release/Install-Prism.ps1', 'release/SHA256.json')
+          $assets = @('main.js', 'manifest.json', 'styles.css')
           foreach ($asset in $assets) { if (-not (Test-Path -LiteralPath $asset)) { Write-Host "Missing asset: $asset"; exit 1 } }
           git tag -f $version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
