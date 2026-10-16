@@ -1,3 +1,14 @@
+# Prism Studio 1.6.3
+
+为 Obsidian 提供透明主题、阅读增强与内容工作台。
+
+- 文档修正：README 的安装说明改为「商店安装优先 + 手动放置三个运行文件」，不再指引下载已停止上传的 zip 安装包与 `Install-Prism.ps1`。
+- README 补充内置字体的获取方式：字体不随商店或 Release 下发，需用源码目录的 `python scripts/fetch-fonts.py --locked` 或本地 `npm run package` 取得 `fonts/`；缺少字体时自动回退到后备字体。
+- README 最低 Obsidian 版本更新为 1.7.2，与 manifest 一致。
+- 仅文档变更，插件代码、外观与交互与 1.6.2 完全一致。
+
+---
+
 # Prism Studio 1.6.2
 
 为 Obsidian 提供透明主题、阅读增强与内容工作台。

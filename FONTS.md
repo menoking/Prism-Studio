@@ -36,6 +36,6 @@
 
 全部内置字体按 **SIL Open Font License 1.1** 分发，原始 TTF 文件未子集化、未改名、未修改字形。各字体的完整许可与版权声明均在 `fonts/LICENSE-*.txt`。字体家族的 `Prism …` 仅为 CSS 注册别名，不改变字体文件。
 
-下载来源、版本与 SHA256 记录在 `fonts/SOURCES.json`；发行包的逐文件校验值在 `release/SHA256.json`。字体取自官方 Google Fonts 仓库及霞鹜文楷官方发布。
+下载来源、版本与 SHA256 记录在 `fonts/SOURCES.json`；本地 `npm run package` 生成的发行包另有逐文件校验值 `release/SHA256.json`（不上传到 Release）。字体取自官方 Google Fonts 仓库及霞鹜文楷官方发布。
 
 字体文件失败时会按字体栈回退到本机中文字体与通用字体。安装时应保留完整的 `fonts/` 文件夹。

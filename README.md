@@ -48,12 +48,15 @@ Prism Studio 提供 **18 套配色、5 种材质、独立的界面与笔记字�
 
 ## 安装与升级
 
-1. 在 [Releases](https://github.com/menoking/Prism-Studio/releases/latest) 下载完整安装包，解压。
-2. 将完整的 `prism-studio` 文件夹复制到知识库的 `.obsidian/plugins/` 下。
-3. 打开 Obsidian → 设置 → 第三方插件，启用 **Prism Studio**。
-4. 进入 **设置 → Prism Studio** 调整配色、材质和字体，或点击左侧 Prism Studio 图标打开工作台。
+**推荐：** 打开 设置 → 第三方插件 → 浏览，搜索 **Prism Studio**，安装并启用。商店安装只下发 `main.js`、`manifest.json`、`styles.css` 三个运行文件。
 
-安装后的目录应为：
+**手动安装：** 在 [Releases](https://github.com/menoking/Prism-Studio/releases/latest) 下载这三个文件，放入知识库的 `.obsidian/plugins/prism-studio/` 下，然后在 设置 → 第三方插件 中启用。
+
+启用后进入 **设置 → Prism Studio** 调整配色、材质和字体，或点击左侧 Prism Studio 图标打开工作台。
+
+### 内置字体
+
+插件自带 8 个开放字体家族（约 57 MiB），**不通过商店或 Release 下发**，仓库中只保存字体的来源与许可清单（`fonts/SOURCES.json`、`fonts/LICENSE-*.txt`）而不含 TTF 文件。需要内置字体时，在源码目录执行 `python scripts/fetch-fonts.py --locked` 按锁定版本拉取，或直接使用本地 `npm run package` 生成的完整发行包，然后把 `fonts/` 目录放进插件目录：
 
 ```text
 你的知识库/
@@ -67,18 +70,12 @@ Prism Studio 提供 **18 套配色、5 种材质、独立的界面与笔记字�
       └─ SOURCES.json
 ```
 
-**请完整保留 `fonts/` 文件夹。** 插件自带 8 个开放字体家族，约 57 MiB；字体按需从本地加载，不依赖 CDN，也不需要安装到操作系统。
+**请完整保留 `fonts/` 文件夹。** 字体按需从本地加载，不依赖 CDN，也不需要安装到操作系统。缺少 `fonts/` 时界面与笔记会回退到字体栈中的后备字体，其余功能不受影响。
 
-升级时覆盖插件运行文件和字体目录，保留 `data.json`。使用源码目录中的安装脚本会自动备份旧版本与数据：
+升级时覆盖插件运行文件，保留 `data.json` 与 `fonts/`。从源码目录安装可自动备份旧版本与数据：
 
 ```powershell
 .\scripts\install.ps1 -VaultPath "你的知识库完整路径"
-```
-
-Release 中的 `Install-Prism.ps1` 可与解压后的 `prism-studio` 文件夹放在同一目录，然后运行：
-
-```powershell
-.\Install-Prism.ps1 -VaultPath "你的知识库完整路径" -PluginPath ".\prism-studio"
 ```
 
 ## 字体与排版
@@ -133,7 +130,7 @@ Release 中的 `Install-Prism.ps1` 可与解压后的 `prism-studio` 文件夹�
 
 ## 平台与玻璃效果
 
-- 最低 Obsidian 版本为 **1.5.0**；本版本在 **Windows / Obsidian 1.14.4** 完成实机截图与运行检查。
+- 最低 Obsidian 版本为 **1.7.2**；本版本在 **Windows / Obsidian 1.14.4** 完成实机截图与运行检查。
 - Windows 11 22H2+ 使用系统 Acrylic；macOS 接入原生 vibrancy，尚未在本项目环境实测。
 - 桌面透视依赖系统透明效果、图形加速与较新的 Obsidian 安装程序。失焦、节能或系统设置可能减弱透明度。
 - 不支持原生玻璃的平台仍可使用配色与面板材质，并可指定知识库内的备用背景图片。
@@ -160,7 +157,7 @@ npm test
 npm run package
 ```
 
-字体的来源与 SHA256 记录在 `fonts/SOURCES.json`，许可证随源码与发行包保留。发行包包含完整插件与文档，校验值在 `release/SHA256.json`。
+字体的来源与 SHA256 记录在 `fonts/SOURCES.json`，许可证随源码保留。`npm run package` 会在本地生成包含完整插件、字体与文档的发行包，以及逐文件校验值与 `release/SHA256.json`；这些本地产物不会上传到 Release。
 
 原生交互检查与截图脚本只操作 `.test-vault` / `.test-profile` 中的演示库。通过 `OBSIDIAN_EXE` 指定本机 Obsidian 可执行文件，必要时用 `PRISM_THEME_SOURCE` 指定本机 Blue Topaz 主题目录。
 
