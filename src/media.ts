@@ -147,7 +147,8 @@ export class MediaEffects {
         originals.forEach(node=>node.classList.add('prism-deck-original'));
         // Hide only the image embeds; surrounding lists and text keep their native render children.
         if(run.start<info.lineStart){const child=new MarkdownRenderChild(el);ctx.addChild(child);child.register(()=>originals.forEach(node=>node.classList.remove('prism-deck-original')));continue;}
-        const wrapper=el.ownerDocument.createDiv({cls:'prism-deck'});wrapper.dataset.prismAuto='true';originals[originals.length-1].after(wrapper);
+        // Detached element: createDiv on a Document appends to <html> and throws HierarchyRequestError.
+        const wrapper=el.ownerDocument.createElement('div');wrapper.className='prism-deck';wrapper.dataset.prismAuto='true';originals[originals.length-1].after(wrapper);
         const child=new MarkdownRenderChild(wrapper);ctx.addChild(child);
         child.register(()=>{this.decks.get(wrapper)?.destroy();this.decks.delete(wrapper);wrapper.remove();originals.forEach(node=>node.classList.remove('prism-deck-original'));});
         for(const source of run.sources){const card=wrapper.createDiv();await MarkdownRenderer.render(plugin.app,source,card,ctx.sourcePath,child);}
@@ -208,7 +209,8 @@ export class MediaEffects {
     let run:Origin[]=[];
     let extending:ImageDeck|undefined;
     const flush=()=>{if(run.length>=2){
-      const wrapper=root.ownerDocument.createDiv({cls:'prism-deck'});
+      // Detached element: createDiv on a Document appends to <html> and throws HierarchyRequestError.
+      const wrapper=root.ownerDocument.createElement('div');wrapper.className='prism-deck';
       run[0].parent.before(wrapper);for(const origin of run){origin.card.before(origin.anchor);wrapper.appendChild(origin.card);origin.parent.classList.add('prism-deck-consumed');}
       this.decks.set(wrapper,new ImageDeck(wrapper,this.plugin,true,run));
     }run=[];};
