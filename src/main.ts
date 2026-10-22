@@ -5,6 +5,7 @@ import { CaptureModal, NotePicker, TaskModal, ManageModal, HomeLayoutModal } fro
 import { FloatingNotes } from './floating';
 import { NativeGlass } from './glass';
 import { WindowPin } from './window-pin';
+import { TitlebarDrag } from './titlebar-drag';
 import { ReadingEnhancements } from './reading';
 import { MediaEffects } from './media';
 import { PALETTES, PALETTE_OPTIONS, MATERIAL_OPTIONS, tokenDeclarations } from './appearance';
@@ -16,6 +17,7 @@ export default class PrismPlugin extends Plugin {
   floats!: FloatingNotes;
   glass=new NativeGlass();
   windowPin=new WindowPin();
+  titlebarDrag=new TitlebarDrag();
   reading!: ReadingEnhancements;
   media!: MediaEffects;
   private subscribers=new Set<()=>void>();
@@ -105,7 +107,7 @@ export default class PrismPlugin extends Plugin {
   onunload(): void {
     this.active=false;
     this.floats.closeAll(true);
-    this.reading.destroy();this.media.destroy();this.glass.destroy();this.windowPin.destroy();
+    this.reading.destroy();this.media.destroy();this.glass.destroy();this.windowPin.destroy();this.titlebarDrag.destroy();
     for(const doc of this.documents){doc.body.classList.remove('prism-skin','prism-note-wheel-zoom','prism-media-decks');delete doc.body.dataset.prismMaterial;delete doc.body.dataset.prismPalette;doc.getElementById('prism-dynamic-skin')?.remove();doc.getElementById('prism-font-faces')?.remove();}
     this.documents.clear();this.subscribers.clear();
   }
@@ -197,6 +199,8 @@ export default class PrismPlugin extends Plugin {
     doc.body.classList.toggle('prism-note-wheel-zoom',this.data.settings.noteWheelZoom && !this.data.settings.enabled);
     doc.body.classList.toggle('prism-media-decks',this.data.settings.imageDecks);
     const s=this.data.settings;
+    doc.body.classList.toggle('prism-tab-gap',s.tabGap);
+    this.titlebarDrag.attach(doc,s.titlebarDragHeight);
     doc.body.dataset.prismMaterial=s.material;doc.body.dataset.prismPalette=s.palette;
     this.glass.apply(doc,s.enabled && s.nativeGlass && s.material!=='solid',s.material);
     this.reading.attach(doc);this.media.attach(doc);
@@ -401,6 +405,8 @@ class PrismSettings extends PluginSettingTab {
     for(const [key,label,min,max,step] of sliders)new Setting(el).setName(label).addSlider(c=>c.setLimits(min,max,step).setValue(s[key] as number).setDynamicTooltip().onChange(v=>void this.plugin.updateSettings({[key]:v})));
     this.typography(el);
     new Setting(el).setName('备用背景图片').setDesc('知识库内图片路径；留空直接使用原生桌面玻璃。图片不会自动伪装成桌面透视。').addText(c=>c.setValue(s.backgroundPath).setPlaceholder('Assets/wallpaper.jpg').onChange(v=>void this.plugin.updateSettings({backgroundPath:v.trim()})));
+    new Setting(el).setName('窗口拖动热区').setDesc('标签页铺满标题栏后，能拖动的位置只剩几像素。这里在窗口最上方留一条隐形热区，任何标签数量下都能拖动；双击可最大化或还原，右侧窗口按钮不受影响。').addDropdown(c=>c.addOptions({'0':'关闭','8':'8 px（保守）','10':'10 px（默认）','14':'14 px（宽松）'}).setValue(String(s.titlebarDragHeight)).onChange(v=>void this.plugin.updateSettings({titlebarDragHeight:Number(v)})));
+    new Setting(el).setName('标签页间隙').setDesc('在标签之间留 6 px 空隙，每条缝隙都能拖动窗口，同时让标签更透气。').addToggle(c=>c.setValue(s.tabGap).onChange(v=>void this.plugin.updateSettings({tabGap:v})));
     new Setting(el).setName('章节滚动条').setDesc('阅读与编辑视图显示刻度、章节标记和悬浮小标题。支持拖动、点击刻度及键盘定位。').addToggle(c=>c.setValue(s.readingRail).onChange(v=>void this.plugin.updateSettings({readingRail:v})));
     new Setting(el).setName('图片滚动动效').setDesc('单图带轻微透视入场；多图卡片随滚动进场、缩小和堆叠。尊重系统减少动画设置。').addToggle(c=>c.setValue(s.imageMotion).onChange(v=>void this.plugin.updateSettings({imageMotion:v})));
     new Setting(el).setName('图片堆叠').setDesc('阅读视图中的连续图片自动组成层叠卡组，同一行多张图片也可识别；支持 prism-deck。淡色图标可展开或收起，关闭动效时平铺显示。').addToggle(c=>c.setValue(s.imageDecks).onChange(v=>void this.plugin.updateSettings({imageDecks:v})));

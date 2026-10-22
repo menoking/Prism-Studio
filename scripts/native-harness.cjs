@@ -9,10 +9,11 @@ module.exports=class PrismNativeHarness extends Plugin{
     const out=path.join(path.dirname(base),'verification');fs.mkdirSync(out,{recursive:true});
     const report={appVersion:this.app.getVersion?.()||require('obsidian').apiVersion,started:new Date().toISOString(),checks:[],screenshots:[],errors:[],artifacts:Object.fromEntries(['main.js','manifest.json','styles.css'].map(name=>[name,require('crypto').createHash('sha256').update(fs.readFileSync(path.join(base,'.obsidian','plugins','prism-studio',name))).digest('hex')]))};
     const save=()=>fs.writeFileSync(path.join(out,'native-results.json'),JSON.stringify(report,null,2));
+    const errors=[];
     const assert=(ok,msg)=>{if(!ok)throw new Error(msg);};
     const wait=ms=>new Promise(r=>setTimeout(r,ms));
     const until=async(fn,timeout=6000)=>{const end=Date.now()+timeout;while(Date.now()<end){if(fn())return;await wait(80);}throw new Error('Timed out waiting for app state');};
-    const check=async(name,run)=>{try{await run();report.checks.push({name,pass:true});}catch(error){const settings=this.app.setting;report.checks.push({name,pass:false,error:String(error),stack:error.stack,diagnostic:name.startsWith('Settings')?{headings:[...document.querySelectorAll('h2')].map(el=>({text:el.textContent,parent:el.parentElement.className})),settingKeys:Object.keys(settings||{}),activeTab:settings?.activeTab?.id,lastTabId:settings?.lastTabId,pluginTabs:settings?.pluginTabs?.map(t=>({id:t.id,name:t.name,connected:t.containerEl?.isConnected,root:t.containerEl?.getRootNode()?.constructor?.name,html:t.containerEl?.innerHTML.slice(0,600)})),container:{connected:settings?.containerEl?.isConnected,root:settings?.containerEl?.getRootNode()?.constructor?.name,owner:settings?.containerEl?.ownerDocument===document,html:settings?.containerEl?.outerHTML.slice(0,3000)},modalHtml:[...document.querySelectorAll('.modal')].map(el=>el.outerHTML.slice(0,12000))}:undefined});closeModals();if(name.startsWith('Settings'))settings.close();}save();};
+    const check=async(name,run)=>{const before=errors.length;try{await run();report.checks.push({name,pass:true});}catch(error){const settings=this.app.setting;report.checks.push({name,pass:false,error:String(error),stack:error.stack,diagnostic:name.startsWith('Settings')?{headings:[...document.querySelectorAll('h2')].map(el=>({text:el.textContent,parent:el.parentElement.className})),settingKeys:Object.keys(settings||{}),activeTab:settings?.activeTab?.id,lastTabId:settings?.lastTabId,pluginTabs:settings?.pluginTabs?.map(t=>({id:t.id,name:t.name,connected:t.containerEl?.isConnected,root:t.containerEl?.getRootNode()?.constructor?.name,html:t.containerEl?.innerHTML.slice(0,600)})),container:{connected:settings?.containerEl?.isConnected,root:settings?.containerEl?.getRootNode()?.constructor?.name,owner:settings?.containerEl?.ownerDocument===document,html:settings?.containerEl?.outerHTML.slice(0,3000)},modalHtml:[...document.querySelectorAll('.modal')].map(el=>el.outerHTML.slice(0,12000))}:undefined});closeModals();if(name.startsWith('Settings'))settings.close();}finally{const added=errors.length-before;if(added){if(!report.errorGrowth)report.errorGrowth=[];report.errorGrowth.push({name,added});}}save();};
     const click=(selector,label)=>{const el=[...document.querySelectorAll(selector)].find(el=>el.getAttribute('aria-label')===label||el.textContent.trim()===label);assert(el,`Missing control: ${label}`);el.click();return el;};
     const closeModals=()=>document.querySelectorAll('.modal-container .modal-header-button').forEach(el=>el.click());
     const input=(el,value)=>{el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));};
@@ -23,7 +24,7 @@ module.exports=class PrismNativeHarness extends Plugin{
       const screenshot=async(name,target=win)=>{document.querySelectorAll('.notice').forEach(el=>el.remove());const otherLeaves=[];this.app.workspace.iterateAllLeaves(leaf=>{if(leaf!==this.app.workspace.activeLeaf && ['markdown','empty','prism-studio-view'].includes(leaf.view.getViewType()))otherLeaves.push(leaf);});for(const leaf of otherLeaves)leaf.detach();await wait(500);const image=await target.capturePage();assert(!image.isEmpty(),'Screenshot was empty');fs.writeFileSync(path.join(out,`${name}.png`),image.toPNG());report.screenshots.push(`${name}.png`);save();};
       await until(()=>this.app.plugins.getPlugin('prism-studio'));prism=this.app.plugins.getPlugin('prism-studio');
       window.__prismNativeTesting=true;
-      const errors=[];const onError=event=>errors.push(event.message||String(event.reason));window.addEventListener('error',onError);window.addEventListener('unhandledrejection',onError);
+      const onError=event=>errors.push(event.message||String(event.reason));window.addEventListener('error',onError);window.addEventListener('unhandledrejection',onError);
       await check('Native startup: registered commands, skin, home and live vault lists',async()=>{
         await prism.openStudio('home');await wait(600);
         assert(document.body.classList.contains('prism-skin'),'Skin not enabled');assert(document.querySelector('.prism-home-grid'),'Home missing');
@@ -193,9 +194,35 @@ module.exports=class PrismNativeHarness extends Plugin{
         await prism.floats.open(mediaFile);await wait(600);assert(document.querySelector('.prism-floating .prism-deck-stage'),'Floating note deck missing');prism.floats.closeAll(true);
         assert((await this.app.vault.read(mediaFile)).includes('## Automatic image stack'),'Source document changed');
       });
+      await check('Titlebar drag band stays above tiled tabs and clears native window buttons',async()=>{
+        const band=document.querySelector('.prism-titlebar-drag');assert(band,'Titlebar drag band missing');
+        const style=getComputedStyle(band),box=band.getBoundingClientRect();
+        const region=style.getPropertyValue('-webkit-app-region')||style.webkitAppRegion||'';
+        report.dragDebug={region,height:box.height,right:box.right,width:box.width,tabGap:getComputedStyle(document.querySelector('.workspace .mod-root .workspace-tab-header-container-inner')).gap};
+        assert(!region||region==='drag',`Drag band is not a drag region: ${region}`);
+        assert(box.height>=10,'Drag band is thinner than the default');
+        const controls=document.querySelector('.titlebar-button-container.mod-right');
+        if(controls){const c=controls.getBoundingClientRect();assert(box.right<=c.left+1,`Drag band overlaps window controls: ${box.right} > ${c.left}`);}
+        assert(box.top===0,'Drag band is not flush with the window top');
+        const probe=document.elementFromPoint(box.left+box.width/2,2);
+        assert(probe===band||band.contains(probe),`Drag band is covered by ${probe&&(probe.className||probe.tagName)}`);
+        const closeButton=document.querySelector('.titlebar-button.mod-close');
+        if(closeButton){const r=closeButton.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);assert(hit===closeButton||closeButton.contains(hit),`Close button is covered by ${hit&&(hit.className||hit.tagName)}`);}
+        const inner=document.querySelector('.workspace .mod-root .workspace-tab-header-container-inner');
+        assert(parseFloat(getComputedStyle(inner).gap)>=6,'Tab gaps are not enabled by default');
+        await prism.updateSettings({titlebarDragHeight:14});await wait(150);
+        assert(document.querySelector('.prism-titlebar-drag').getBoundingClientRect().height===14,'Custom drag height ignored');
+        await prism.updateSettings({titlebarDragHeight:0});await wait(150);
+        assert(!document.querySelector('.prism-titlebar-drag'),'Disabled drag band still mounted');
+        await prism.updateSettings({titlebarDragHeight:10,tabGap:false});await wait(150);
+        assert(document.querySelector('.prism-titlebar-drag'),'Drag band did not come back');
+        assert(getComputedStyle(inner).gap==='normal'||parseFloat(getComputedStyle(inner).gap)===0,'Tab gaps remain after disabling');
+        await prism.updateSettings({tabGap:true});await wait(150);
+        assert(parseFloat(getComputedStyle(inner).gap)>=6,'Tab gaps did not return');
+      });
       await check('Plugin reload restores persisted tasks, and unload removes skin and floating views',async()=>{
         await this.app.plugins.disablePlugin('prism-studio');assert(!document.body.classList.contains('prism-skin'),'Skin remains after unload');assert(!document.querySelector('#prism-dynamic-skin'),'Dynamic CSS remains after unload');assert(!document.querySelector('.prism-floating'),'Floating windows remain after unload');
-        assert(!document.querySelector('.prism-reading-rail'),'Reading rails remain after unload');assert(!document.querySelector('.prism-image-motion,.prism-deck-stage'),'Media effects remain after unload');assert(!document.documentElement.classList.contains('prism-native-glass'),'Native glass remains after unload');
+        assert(!document.querySelector('.prism-reading-rail'),'Reading rails remain after unload');assert(!document.querySelector('.prism-image-motion,.prism-deck-stage'),'Media effects remain after unload');assert(!document.documentElement.classList.contains('prism-native-glass'),'Native glass remains after unload');assert(!document.querySelector('.prism-titlebar-drag'),'Titlebar drag band remains after unload');
         await this.app.plugins.enablePlugin('prism-studio');await until(()=>this.app.plugins.getPlugin('prism-studio'));prism=this.app.plugins.getPlugin('prism-studio');assert(prism.data.tasks.some(t=>t.title==='Native task edited'),'Tasks lost on reload');await prism.openStudio('home');await wait(250);await screenshot('12-final-home');
       });
       closeModals();window.removeEventListener('error',onError);window.removeEventListener('unhandledrejection',onError);report.errors=errors;report.finished=new Date().toISOString();report.pass=report.checks.every(c=>c.pass)&&!errors.length;

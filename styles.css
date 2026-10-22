@@ -15,6 +15,17 @@ body.mod-windows.prism-window-pin-mounted:not(.mod-system-rtl, .is-fullscreen),
 body.mod-linux.prism-window-pin-mounted:not(.mod-system-rtl, .is-fullscreen) {
   --frame-right-space: calc(var(--prism-window-controls-width) - var(--frame-ribbon-right, 0px));
 }
+/* Invisible drag band above the tab bar. Root tabs use flex: 1 1 0 and tile the whole
+   titlebar once several are open, leaving only the ~5px margin above them draggable.
+   The selector must outrank `body.is-frameless > .app-container ~ *` (no-drag). */
+body.is-frameless > div.prism-titlebar-drag {
+  position: fixed; top: 0; left: 0;
+  right: var(--prism-window-controls-width, 132px); height: 10px;
+  z-index: 45; background: transparent; -webkit-app-region: drag;
+}
+body.is-fullscreen > div.prism-titlebar-drag { display: none; }
+/* Gaps sit inside the tab container's own drag region, so each one becomes a grab point. */
+body.prism-tab-gap .workspace .mod-root .workspace-tab-header-container-inner { gap: 6px; }
 .prism-view, .prism-modal, .prism-floating, body.prism-skin {
   --prism-blue: 190 222 242;
   --prism-accent-rgb: 63 118 151; --prism-surface-rgb: 237 248 255;

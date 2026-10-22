@@ -44,6 +44,7 @@ export interface SkinSettings {
   captureFolder: string; dailyFolder: string;
   nativeGlass: boolean; readingRail: boolean; imageMotion: boolean; imageDecks: boolean;
   imageFit: 'natural'|'cover';
+  titlebarDragHeight: number; tabGap: boolean;
   homeWidgets: HomeVisibility;
 }
 export interface Data {
@@ -59,7 +60,7 @@ export const DEFAULT_SETTINGS: SkinSettings = {
   backgroundPath: '', homeOnStartup: false, recordActivity: true,
   captureFolder: 'Prism/Inbox', dailyFolder: 'Prism/Daily',
   nativeGlass: true, readingRail: true, imageMotion: true, imageDecks: true,
-  imageFit: 'natural',
+  imageFit: 'natural', titlebarDragHeight: 10, tabGap: true,
   homeWidgets: normalizeHomeWidgets(undefined)
 };
 export function localDay(value: Date | number = new Date()): string {
@@ -126,6 +127,9 @@ export function normalizeData(raw: Partial<Data> | null | undefined): Data {
   settings.dailyFolder=sanitizeFolder(settings.dailyFolder) || DEFAULT_SETTINGS.dailyFolder;
   settings.homeWidgets=normalizeHomeWidgets(settings.homeWidgets);
   if(settings.imageFit!=='cover')settings.imageFit='natural';
+  const dragHeight=Number(settings.titlebarDragHeight);
+  settings.titlebarDragHeight=Number.isFinite(dragHeight)&&dragHeight>0?Math.max(6,Math.min(20,Math.round(dragHeight))):0;
+  settings.tabGap=settings.tabGap!==false;
   const fileStats: Record<string, FileStats> = {};
   if(raw?.fileStats && typeof raw.fileStats==='object'){
     for(const [path,stats] of Object.entries(raw.fileStats)){
