@@ -128,29 +128,43 @@ export class MediaEffects {
   private decks=new Map<HTMLElement,ImageDeck>();
   private images=new Set<HTMLImageElement>();
   private frames=new Map<Document,number>();
+  private autoToken=0;
   constructor(private plugin:PrismPlugin){
+    // A block can be re-rendered in place, and Obsidian then reuses the same embed nodes. Stamping every
+    // hidden node with the pass that hid it keeps a late cleanup from un-hiding a freshly built stack.
+    const stamp=()=>String(++this.autoToken);
+    const hide=(node:HTMLElement,by:string)=>{node.classList.add('prism-deck-original');node.dataset.prismDeckOwner=by;};
+    const release=(nodes:HTMLElement[],by:string)=>{for(const node of nodes){if(node.dataset.prismDeckOwner!==by)continue;node.classList.remove('prism-deck-original');delete node.dataset.prismDeckOwner;}};
     plugin.registerMarkdownPostProcessor(async(el,ctx)=>{
-      if(el.closest('.prism-deck') || el.querySelector('.prism-deck') || !el.querySelector('img,.image-embed,.internal-embed'))return;
+      // Card content renders the same embeds again; it must never be treated as a source block.
+      if(el.closest('.prism-deck'))return;
+      if(!el.querySelector('.internal-embed,img'))return;
+      // Reuse of a block keeps the previous wrapper inside it: rebuild instead of trusting stale DOM.
+      const stale=[...el.querySelectorAll<HTMLElement>('.prism-deck[data-prism-auto]')];
+      if(stale.length)for(const deck of stale){this.decks.get(deck)?.destroy();this.decks.delete(deck);deck.remove();}
+      for(const node of [...el.querySelectorAll<HTMLElement>('.prism-deck-original')]){node.classList.remove('prism-deck-original');delete node.dataset.prismDeckOwner;}
       const info=ctx.getSectionInfo(el);if(!info)return;
       const lines=info.text.split(/\r?\n/),isWikiImage=(target:string)=>{
         const file=plugin.app.metadataCache.getFirstLinkpathDest(target,ctx.sourcePath);
         return /\.(png|jpe?g|webp|gif|avif|svg|bmp)$/i.test(target) || !!file && /^(png|jpe?g|webp|gif|avif|svg|bmp)$/i.test(file.extension);
       };
-      const roots=[...new Set([...el.querySelectorAll<HTMLElement>('.internal-embed,img')]
+      const roots=[...new Set([...(el.matches('.internal-embed,img')?[el as HTMLElement]:[]),...el.querySelectorAll<HTMLElement>('.internal-embed,img')]
         .filter(node=>!node.closest('.markdown-embed') && (!node.matches('.internal-embed')||isWikiImage(node.getAttribute('src')||'')))
         .map(node=>node.closest<HTMLElement>('.internal-embed')||node))];
+      const by=stamp();
       for(const run of imageRuns(lines,isWikiImage)){
         const first=Math.max(run.start,info.lineStart),last=Math.min(run.end,info.lineEnd);if(first>last)continue;
         const offset=lines.slice(info.lineStart,first).flatMap(line=>inlineImageSources(line,isWikiImage)).length;
         const count=lines.slice(first,last+1).flatMap(line=>imageSources(line,isWikiImage)).length;
-        const originals=roots.slice(offset,offset+count);if(!originals.length)continue;
-        originals.forEach(node=>node.classList.add('prism-deck-original'));
+        const originals=roots.slice(offset,offset+Math.min(count,Math.max(0,roots.length-offset)));if(!originals.length)continue;
         // Hide only the image embeds; surrounding lists and text keep their native render children.
-        if(run.start<info.lineStart){const child=new MarkdownRenderChild(el);ctx.addChild(child);child.register(()=>originals.forEach(node=>node.classList.remove('prism-deck-original')));continue;}
+        originals.forEach(node=>hide(node,by));
+        // This block carries only part of a run that an earlier block already stacked.
+        if(run.start<info.lineStart){const child=new MarkdownRenderChild(el);ctx.addChild(child);child.register(()=>release(originals,by));continue;}
         // Detached element: createDiv on a Document appends to <html> and throws HierarchyRequestError.
         const wrapper=el.ownerDocument.createElement('div');wrapper.className='prism-deck';wrapper.dataset.prismAuto='true';originals[originals.length-1].after(wrapper);
         const child=new MarkdownRenderChild(wrapper);ctx.addChild(child);
-        child.register(()=>{this.decks.get(wrapper)?.destroy();this.decks.delete(wrapper);wrapper.remove();originals.forEach(node=>node.classList.remove('prism-deck-original'));});
+        child.register(()=>{this.decks.get(wrapper)?.destroy();this.decks.delete(wrapper);wrapper.remove();release(originals,by);});
         for(const source of run.sources){const card=wrapper.createDiv();await MarkdownRenderer.render(plugin.app,source,card,ctx.sourcePath,child);}
         wrapper.dataset.prismReady='true';
       }
@@ -244,7 +258,7 @@ export class MediaEffects {
   destroy():void {
     for(const [doc,state] of this.docs){state.observer.disconnect();doc.defaultView?.clearTimeout(state.timer);doc.defaultView?.cancelAnimationFrame(this.frames.get(doc)||0);state.cleanup();}this.frames.clear();
     for(const deck of this.decks.values())deck.destroy();this.decks.clear();
-    for(const doc of this.docs.keys()){doc.body.classList.remove('prism-media-decks');doc.querySelectorAll('[data-prism-auto]').forEach(el=>el.remove());doc.querySelectorAll('.prism-deck-original,.prism-deck-consumed').forEach(el=>el.classList.remove('prism-deck-original','prism-deck-consumed'));}
+    for(const doc of this.docs.keys()){doc.body.classList.remove('prism-media-decks');doc.querySelectorAll('[data-prism-auto]').forEach(el=>el.remove());doc.querySelectorAll('.prism-deck-original,.prism-deck-consumed').forEach(el=>{el.classList.remove('prism-deck-original','prism-deck-consumed');delete (el as HTMLElement).dataset.prismDeckOwner;});}
     this.docs.clear();
     for(const img of this.images){img.classList.remove('prism-image-motion');img.style.removeProperty('--prism-image-y');img.style.removeProperty('--prism-image-tilt');}this.images.clear();
   }
