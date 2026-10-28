@@ -11,7 +11,7 @@ export class StudioView extends ItemView{
   tab:'home'|'tasks'|'pulse'='home';
   private lane:Lane='today';private projectId='';private sprintId='';private query='';private board=false;
   private metric='score';private selectedDay=localDay();private reviewTab='today';
-  private createdView:'today'|'week'|'month'|'modified'='today';private createdNonEmptyOnly=false;
+  private createdView:'today'|'week'|'month'|'modified'|'starred'='today';private createdNonEmptyOnly=false;
   private rangeWeeks=52;
   private unsubscribe?:()=>void;private renderTimer?:number;
   constructor(leaf:WorkspaceLeaf,public plugin:PrismPlugin){super(leaf);}
@@ -31,6 +31,8 @@ export class StudioView extends ItemView{
   }
   async onClose():Promise<void>{this.unsubscribe?.();if(this.renderTimer)window.clearTimeout(this.renderTimer);}
   selectTab(tab:typeof this.tab):void{this.tab=tab;this.render();this.app.workspace.requestSaveLayout();}
+  /** Jump straight to the starred tab inside 最近创作动态. */
+  selectStarredNotes():void{this.tab='home';this.createdView='starred';this.render();this.app.workspace.requestSaveLayout();}
   private scheduleRender():void{if(this.renderTimer)window.clearTimeout(this.renderTimer);this.renderTimer=window.setTimeout(()=>{this.renderTimer=undefined;this.render();},100);}
   render():void{
     const el=this.contentEl;if(!el)return;
@@ -170,34 +172,34 @@ export class StudioView extends ItemView{
   }
   private noteSection(parent:HTMLElement,title:string,name:string,files:TFile[],message:string,widget?:string):void{
     const section=this.homeSection(parent,title,name,`${files.length} 篇`);if(widget)section.dataset.prismWidget=widget;const list=section.createDiv({cls:'prism-note-list'});if(!files.length)empty(list,message,name);
-    for(const file of files.slice(0,8)){const row=list.createDiv({cls:'prism-note-row'});const link=row.createEl('button',{cls:'prism-note-link',text:file.basename,attr:{title:file.path}});link.addEventListener('click',()=>this.plugin.openFile(file.path));const status=String(this.app.metadataCache.getFileCache(file)?.frontmatter?.status??'');if(status)row.createSpan({cls:'prism-badge',text:status});button(row,'浮动显示','layers',()=>void this.plugin.floats.open(file),'prism-icon-only');}
+    for(const file of files.slice(0,8)){const row=list.createDiv({cls:'prism-note-row'});const starred=this.plugin.starred.is(file.path);const link=row.createEl('button',{cls:`prism-note-link${starred?' prism-starred':''}`,text:file.basename,attr:{title:file.path}});link.addEventListener('click',()=>this.plugin.openFile(file.path));const status=String(this.app.metadataCache.getFileCache(file)?.frontmatter?.status??'');if(status)row.createSpan({cls:'prism-badge',text:status});button(row,'浮动显示','layers',()=>void this.plugin.floats.open(file),'prism-icon-only');}
     if(files.length>8)button(section,`查看全部 ${files.length} 篇`,'arrow-up-right',()=>new FilteredNotes(this.plugin,files,title).open());
   }
   private createdNotesSection(parent:HTMLElement,createdFiles:TFile[],modifiedFiles:TFile[]):void{
-    const now=Date.now();
+    const now=Date.now(),starredFiles=this.plugin.starred.files();
     if(this.createdNonEmptyOnly){const nonEmpty=(file:TFile)=>file.stat.size>0;createdFiles=createdFiles.filter(nonEmpty);modifiedFiles=modifiedFiles.filter(nonEmpty);}
     const createdGroups=([
       ['today','今天创建','sun'],['week','近七天创建','calendar-days'],['month','近一月创建','calendar-range']
     ] as const).map(([range,label,name])=>({range,label,name,files:createdFiles.filter(file=>inCreatedNoteRange(file.stat.ctime,range,now))}));
     const createdCount=createdGroups.find(group=>group.range==='month')?.files.length||0;
-    const section=this.homeSection(parent,'最近创作动态','history',`近 30 天创建 ${createdCount} 篇 · 修改 ${modifiedFiles.length} 篇`);
+    const section=this.homeSection(parent,'最近创作动态','history',`近 30 天创建 ${createdCount} 篇 · 修改 ${modifiedFiles.length} 篇 · 星标 ${starredFiles.length} 篇`);
     section.dataset.prismWidget='createdNotes';section.addClass('prism-created-notes','prism-home-wide');
     const latest=createdFiles[0],latestModified=modifiedFiles[0];
-    if(!latest&&!latestModified){empty(section,'知识库还没有可展示的创建或修改记录。','file-clock');return;}
+    if(!latest&&!latestModified&&!starredFiles.length){empty(section,'知识库还没有可展示的创建、修改或星标记录。','file-clock');return;}
     const spotlight=section.createDiv({cls:'prism-created-spotlight'});
     if(latest){
       const featured=spotlight.createDiv({cls:'prism-created-feature'});const mark=featured.createDiv({cls:'prism-created-feature-mark'});icon(mark,'sparkles');
       const content=featured.createDiv({cls:'prism-created-feature-content'});content.createSpan({cls:'prism-created-eyebrow',text:'最近创建'});
-      const link=content.createEl('button',{cls:'prism-created-feature-link',text:latest.basename,attr:{type:'button',title:latest.path,'aria-label':`打开最近创建的笔记：${latest.basename}`}});link.addEventListener('click',()=>this.plugin.openFile(latest.path));
+      const link=content.createEl('button',{cls:`prism-created-feature-link${this.plugin.starred.is(latest.path)?' prism-starred':''}`,text:latest.basename,attr:{type:'button',title:latest.path,'aria-label':`打开最近创建的笔记：${latest.basename}`}});link.addEventListener('click',()=>this.plugin.openFile(latest.path));
       content.createSpan({cls:'prism-created-feature-meta',text:`创建于 ${this.createdTime(latest.stat.ctime)} · ${latest.path}`});button(featured,'浮动显示','layers',()=>void this.plugin.floats.open(latest),'prism-icon-only');
     }
     if(latestModified){
       const featured=spotlight.createDiv({cls:'prism-created-feature prism-modified-feature'});const mark=featured.createDiv({cls:'prism-created-feature-mark'});icon(mark,'pencil');
       const content=featured.createDiv({cls:'prism-created-feature-content'});content.createSpan({cls:'prism-created-eyebrow',text:'最近修改'});
-      const link=content.createEl('button',{cls:'prism-created-feature-link',text:latestModified.basename,attr:{type:'button',title:latestModified.path,'aria-label':`打开最近修改的笔记：${latestModified.basename}`}});link.addEventListener('click',()=>this.plugin.openFile(latestModified.path));
+      const link=content.createEl('button',{cls:`prism-created-feature-link${this.plugin.starred.is(latestModified.path)?' prism-starred':''}`,text:latestModified.basename,attr:{type:'button',title:latestModified.path,'aria-label':`打开最近修改的笔记：${latestModified.basename}`}});link.addEventListener('click',()=>this.plugin.openFile(latestModified.path));
       content.createSpan({cls:'prism-created-feature-meta',text:`修改于 ${this.createdTime(latestModified.stat.mtime)} · ${latestModified.path}`});button(featured,'浮动显示','layers',()=>void this.plugin.floats.open(latestModified),'prism-icon-only');
     }
-    const views=[...createdGroups,{range:'modified' as const,label:'最近修改',name:'pencil',files:modifiedFiles}];
+    const views=[...createdGroups,{range:'modified' as const,label:'最近修改',name:'pencil',files:modifiedFiles},{range:'starred' as const,label:'星标',name:'star',files:starredFiles}];
     const active=views.find(view=>view.range===this.createdView)||views[0];
     const toolbar=section.createDiv({cls:'prism-created-toolbar'});
     const tabs=toolbar.createDiv({cls:'prism-created-tabs',attr:{role:'tablist','aria-label':'创作动态时间范围'}});
@@ -207,15 +209,15 @@ export class StudioView extends ItemView{
     const weight=(file:TFile)=>{const stats=this.plugin.data.fileStats[file.path];return (stats?.opens||0)+(stats?.edits||0);};
     const maxWeight=Math.max(...active.files.map(weight),0);
     const grid=section.createDiv({cls:`prism-chip-grid ${active.range==='modified'?'is-modified':''}`});
-    if(!active.files.length)grid.createDiv({cls:'prism-created-empty',text:active.range==='modified'?'最近没有改动记录':'该时间段暂无创建记录'});
+    if(!active.files.length)grid.createDiv({cls:'prism-created-empty',text:active.range==='modified'?'最近没有改动记录':active.range==='starred'?'还没有星标笔记。在笔记右上角点星标，或在文件列表右键添加。':'该时间段暂无创建记录'});
     for(const file of active.files.slice(0,60)){
       const value=weight(file),level=activityLevel(value,maxWeight),stats=this.plugin.data.fileStats[file.path];
-      const chip=grid.createEl('button',{cls:`prism-note-chip level-${level}`,attr:{type:'button',title:`${file.path}\n打开 ${stats?.opens||0} 次 · 编辑 ${stats?.edits||0} 次`,'aria-label':`打开笔记：${file.basename}`}});
+      const chip=grid.createEl('button',{cls:`prism-note-chip level-${level}${this.plugin.starred.is(file.path)?' prism-starred':''}`,attr:{type:'button',title:`${file.path}\n打开 ${stats?.opens||0} 次 · 编辑 ${stats?.edits||0} 次`,'aria-label':`打开笔记：${file.basename}`}});
       chip.createSpan({cls:'prism-note-chip-name',text:file.basename});
       if(value>0)chip.createSpan({cls:'prism-note-chip-count',text:String(value)});
       chip.addEventListener('click',()=>this.plugin.openFile(file.path));
     }
-    if(active.files.length>60)button(section,`查看全部 ${active.files.length} 篇`,'arrow-up-right',()=>new FilteredNotes(this.plugin,active.files,active.label).open(),'prism-created-more');
+    if(active.files.length>60)button(section,active.range==='starred'?'在星标笔记中查看全部':'在笔记列表中查看全部',active.range==='starred'?'star':'arrow-up-right',()=>{if(active.range==='starred')void this.plugin.openStarred();else new FilteredNotes(this.plugin,active.files,active.label).open();},'prism-created-more');
   }
   private createdTime(timestamp:number,timeOnly=false):string{
     const date=new Date(timestamp),time=`${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;

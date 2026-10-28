@@ -66,3 +66,33 @@ export function appearanceTokens(settings:SkinSettings,dark=false):Record<string
 export function tokenDeclarations(settings:SkinSettings,dark=false):string {
   return Object.entries(appearanceTokens(settings,dark)).map(([key,value])=>`${key}:${value};`).join('');
 }
+
+/** HSL round trip used to derive a star highlight that still belongs to the palette. */
+function toHsl(r:number,g:number,b:number):[number,number,number] {
+  const red=r/255,green=g/255,blue=b/255;
+  const max=Math.max(red,green,blue),min=Math.min(red,green,blue),light=(max+min)/2;
+  if(max===min)return [0,0,light];
+  const delta=max-min,saturation=light>.5?delta/(2-max-min):delta/(max+min);
+  const hue=max===red?(green-blue)/delta+(green<blue?6:0):max===green?(blue-red)/delta+2:(red-green)/delta+4;
+  return [hue*60,saturation,light];
+}
+function fromHsl(hue:number,saturation:number,light:number):[number,number,number] {
+  const chroma=(1-Math.abs(2*light-1))*saturation,x=chroma*(1-Math.abs((hue/60)%2-1)),base=light-chroma/2;
+  const [red,green,blue]=hue<60?[chroma,x,0]:hue<120?[x,chroma,0]:hue<180?[0,chroma,x]:hue<240?[0,x,chroma]:hue<300?[x,0,chroma]:[chroma,0,x];
+  return [Math.round((red+base)*255),Math.round((green+base)*255),Math.round((blue+base)*255)];
+}
+/**
+ * Star highlight for a palette: the theme accent pushed to a readable saturation/lightness band,
+ * so starred note names stand out from body text without leaving the palette's hue family.
+ */
+export function starTone(palette:keyof typeof PALETTES,dark=false):string {
+  const source=dark?PALETTES[palette].darkAccent:PALETTES[palette].accent;
+  const [r,g,b]=source.split(/\s+/).map(part=>Number(part)||0);
+  const [rawHue,saturation,light]=toHsl(r,g,b);
+  const hue=Math.min(359.9,Math.max(0,Number.isFinite(rawHue)?rawHue:0));
+  const targetSaturation=Math.min(.92,Math.max(saturation,.58));
+  const targetLight=dark?Math.min(.8,Math.max(light,.66)):Math.min(.45,Math.max(light-.06,.3));
+  const [sr,sg,sb]=fromHsl(hue,targetSaturation,targetLight);
+  return `${sr} ${sg} ${sb}`;
+}
+

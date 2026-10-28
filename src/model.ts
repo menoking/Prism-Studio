@@ -34,6 +34,21 @@ export interface Activity {
   notes: Record<string, NoteActivity>; tasks: number; seconds: number;
   focusSeconds: number; sessions: number; links: number;
 }
+/** Starred notes keep a path -> starred timestamp map so the list can sort newest first. */
+export function normalizeStarred(value:unknown):Record<string,number> {
+  const result:Record<string,number>={};
+  if(!value || typeof value!=='object')return result;
+  for(const [path,at] of Object.entries(value as Record<string,unknown>)){
+    if(typeof path!=='string'||!path)continue;
+    const time=Number(at);
+    result[path]=Number.isFinite(time)&&time>0?time:0;
+  }
+  return result;
+}
+/** Newest first; ties fall back to the path so the order is stable across sessions. */
+export function starredPaths(starred:Record<string,number>):string[] {
+  return Object.keys(starred).sort((a,b)=>(starred[b]||0)-(starred[a]||0)||a.localeCompare(b));
+}
 export interface SkinSettings {
   enabled: boolean; palette: keyof typeof PALETTES;
   material: keyof typeof MATERIALS;
@@ -45,6 +60,7 @@ export interface SkinSettings {
   nativeGlass: boolean; readingRail: boolean; imageMotion: boolean; imageDecks: boolean;
   imageFit: 'natural'|'cover';
   titlebarDragHeight: number; tabGap: boolean;
+  starredTint: boolean; starredMark: boolean;
   homeWidgets: HomeVisibility;
 }
 export interface Data {
@@ -52,6 +68,7 @@ export interface Data {
   sprints: Sprint[]; activity: Record<string, Activity>;
   drafts: Record<string,{content:string;original:string;updatedAt:number}>;
   fileStats: Record<string, FileStats>;
+  starred: Record<string, number>;
 }
 export const DEFAULT_SETTINGS: SkinSettings = {
   enabled: true, palette: 'blue', material: 'glass', intensity: 35, opacity: 42, blur: 20,
@@ -61,6 +78,7 @@ export const DEFAULT_SETTINGS: SkinSettings = {
   captureFolder: 'Prism/Inbox', dailyFolder: 'Prism/Daily',
   nativeGlass: true, readingRail: true, imageMotion: true, imageDecks: true,
   imageFit: 'natural', titlebarDragHeight: 10, tabGap: true,
+  starredTint: true, starredMark: true,
   homeWidgets: normalizeHomeWidgets(undefined)
 };
 export function localDay(value: Date | number = new Date()): string {
@@ -130,6 +148,8 @@ export function normalizeData(raw: Partial<Data> | null | undefined): Data {
   const dragHeight=Number(settings.titlebarDragHeight);
   settings.titlebarDragHeight=Number.isFinite(dragHeight)&&dragHeight>0?Math.max(6,Math.min(20,Math.round(dragHeight))):0;
   settings.tabGap=settings.tabGap!==false;
+  settings.starredTint=settings.starredTint!==false;
+  settings.starredMark=settings.starredMark!==false;
   const fileStats: Record<string, FileStats> = {};
   if(raw?.fileStats && typeof raw.fileStats==='object'){
     for(const [path,stats] of Object.entries(raw.fileStats)){
@@ -148,7 +168,8 @@ export function normalizeData(raw: Partial<Data> | null | undefined): Data {
     projects: Array.isArray(raw?.projects)?raw.projects:[], sprints: Array.isArray(raw?.sprints)?raw.sprints:[],
     activity: raw?.activity && typeof raw.activity==='object'?raw.activity:{},
     drafts: raw?.drafts && typeof raw.drafts==='object'?raw.drafts:{},
-    fileStats
+    fileStats,
+    starred: normalizeStarred(raw?.starred)
   };
 }
 export function isToday(task: Task, today=localDay()): boolean {

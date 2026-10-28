@@ -467,3 +467,42 @@ body:not(.prism-media-decks) .prism-deck[data-prism-auto] { display: none !impor
 .prism-deck.is-static .prism-deck-controls { display: none; }
 @media (prefers-reduced-motion: reduce) { .prism-image-motion { transform: none !important; } }
 @media (prefers-reduced-transparency: reduce) { html.prism-native-glass body.prism-skin .app-container { background: var(--prism-solid) !important; } }
+
+/* Starred notes: --prism-star is derived from each palette's accent, so the highlight
+   follows the theme instead of being a hardcoded gold. Explorer rows are decorated by
+   data-prism-star so native re-renders cannot drop injected nodes. */
+body.prism-star-mark {
+  --prism-star-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='M12 2.6l2.9 5.9 6.5.95-4.7 4.58 1.11 6.47L12 17.45 6.19 20.5l1.11-6.47L2.6 9.45l6.5-.95z'/%3E%3C/svg%3E");
+}
+body.prism-star-tint .nav-file-title[data-prism-star="true"] .nav-file-title-content { color: var(--prism-star, var(--text-accent)); font-weight: 600; }
+body.prism-star-tint .prism-starred { color: var(--prism-star, var(--text-accent)); }
+body.prism-star-mark .nav-file-title[data-prism-star="true"] .nav-file-title-content::before,
+body.prism-star-mark .prism-starred::before {
+  content: ''; display: inline-block; width: .72em; height: .72em; margin-right: .34em;
+  vertical-align: -.02em; background-color: currentColor; opacity: .9;
+  -webkit-mask: var(--prism-star-mask) center / contain no-repeat;
+  mask: var(--prism-star-mask) center / contain no-repeat;
+}
+body.prism-star-mark .prism-starred.prism-note-chip::before { margin-right: 0; }
+.view-actions .clickable-icon.prism-star-action.is-active { color: var(--prism-star, var(--text-accent)); }
+.view-actions .clickable-icon.prism-star-action.is-active svg { fill: currentColor; }
+/* Sidebar tab listing every starred note. */
+.prism-starred-view { padding: 4px 10px 16px; overflow: auto; }
+.prism-starred-head { display: flex; align-items: center; gap: 7px; padding: 6px 2px 8px; }
+.prism-starred-title { margin: 0; font-size: var(--font-ui-small); font-weight: 650; color: var(--text-normal); }
+.prism-starred-count { min-width: 18px; padding: 0 6px; border-radius: 999px; background: rgb(var(--prism-accent-rgb, 79 129 155) / .16); color: var(--text-muted); font-size: var(--font-ui-smaller); text-align: center; }
+.prism-starred-tools { display: flex; gap: 2px; margin-left: auto; }
+.prism-starred-tool { width: 24px; height: 24px; }
+.prism-starred-list { display: flex; flex-direction: column; gap: 1px; }
+.prism-starred-row { display: flex; align-items: center; gap: 1px; border-radius: 6px; }
+.prism-starred-row:hover { background: var(--background-modifier-hover); }
+.prism-starred-open { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; height: auto; padding: 5px 6px; border: 0; border-radius: 6px; background: transparent; box-shadow: none; text-align: left; cursor: pointer; }
+.prism-starred-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-ui-small); color: var(--text-normal); }
+.prism-starred-folder { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-ui-smaller); color: var(--text-faint); }
+.prism-starred-remove { width: 22px; height: 22px; opacity: 0; transition: opacity .12s ease; }
+.prism-starred-row:hover .prism-starred-remove, .prism-starred-remove:focus-visible { opacity: .7; }
+.prism-starred-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 12px; text-align: center; }
+.prism-starred-empty-icon { color: var(--text-faint); }
+.prism-starred-empty-icon svg { width: 26px; height: 26px; }
+.prism-starred-empty p { margin: 0; font-size: var(--font-ui-small); color: var(--text-normal); }
+.prism-starred-empty small { font-size: var(--font-ui-smaller); line-height: 1.7; color: var(--text-faint); }

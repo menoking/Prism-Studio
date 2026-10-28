@@ -97,12 +97,18 @@ module.exports=class MediaHarness extends Plugin {
         await run('source-then-preview',[async({file,leaf})=>{await this.app.vault.modify(file,list+link+link+link);await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'source'}});await wait(700);await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});await wait(1400);}]);
         await run('grow-images-in-preview',[async({file,leaf})=>{await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});await wait(800);await this.app.vault.modify(file,list+link+link);await wait(1200);await this.app.vault.modify(file,list+link+link+link);await wait(1500);}]);
         // The reported note, verbatim, with its real PNG: three identical embeds under a checklist.
+        // The note lives in the user's vault and can be edited between runs, so only replay it while
+        // it still repeats an embed; otherwise record a skip instead of a meaningless failure.
         const notePath=process.env.PRISM_TARGET_NOTE||'D:/Academic/Papers/Notes/Meno‘s Academic Notes/todo/Target.md';
         const imagePath=process.env.PRISM_TARGET_IMAGE||'D:/Academic/Papers/Notes/Meno‘s Academic Notes/Attachment/pic/Pasted image 20261024223302.png';
-        if(fs.existsSync(notePath)&&fs.existsSync(imagePath)){
+        const real=fs.existsSync(notePath)?(await fs.promises.readFile(notePath,'utf8')).replace(/\r\n/g,'\n'):null;
+        const embeds=real?[...real.matchAll(/!\[\[([^\]]+)\]\]/g)].map(match=>match[1].trim().split('|')[0]):[];
+        const repeats=embeds.some(target=>embeds.filter(item=>item===target).length>=2);
+        if(!real||!repeats||!fs.existsSync(imagePath)){
+          report.skipped=[...(report.skipped||[]),{label:'real-note',reason:!real?`${path.basename(notePath)} is not readable`:!repeats?`${path.basename(notePath)} no longer repeats an embed (${embeds.length} embed(s) left)`:!fs.existsSync(imagePath)?`${path.basename(imagePath)} is missing`:'unknown'}];
+        }else{
           const name=path.basename(imagePath),bytes=fs.readFileSync(imagePath);
           await this.app.vault.adapter.writeBinary(name,bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
-          const real=(await fs.promises.readFile(notePath,'utf8')).replace(/\r\n/g,'\n');
           const rows=real.split('\n'),trimmed=()=>{const out=[...rows];for(let i=out.length-1;i>=0;i--)if(out[i].trim()){out.splice(i,1);break;}return out.join('\n').replace(/\n+$/,'\n');};
           await run('real-note-open',[async({file,leaf})=>{await this.app.vault.modify(file,real);await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});await wait(1200);}],real);
           await run('real-note-grow',[async({file,leaf})=>{await this.app.vault.modify(file,trimmed());await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});await wait(1200);await this.app.vault.modify(file,real);await wait(1500);}],trimmed());

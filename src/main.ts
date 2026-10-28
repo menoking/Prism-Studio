@@ -1,4 +1,4 @@
-import { App, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, normalizePath, type DropdownComponent } from 'obsidian';
+import { App, ItemView, MarkdownView, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile, normalizePath, type DropdownComponent } from 'obsidian';
 import { Activity, Data, DEFAULT_SETTINGS, Lane, Project, Sprint, Task, completeTask, emptyActivity, emptyFileStats, localDay, markdownTaskLines, normalizeData, sanitizeFolder, stripControlChars, wordDelta } from './model';
 import { STUDIO_VIEW, StudioView } from './view';
 import { CaptureModal, NotePicker, TaskModal, ManageModal, HomeLayoutModal } from './modals';
@@ -8,7 +8,8 @@ import { WindowPin } from './window-pin';
 import { TitlebarDrag } from './titlebar-drag';
 import { ReadingEnhancements } from './reading';
 import { MediaEffects } from './media';
-import { PALETTES, PALETTE_OPTIONS, MATERIAL_OPTIONS, tokenDeclarations } from './appearance';
+import { PALETTES, PALETTE_OPTIONS, MATERIAL_OPTIONS, tokenDeclarations, starTone } from './appearance';
+import { STARRED_VIEW, StarredNotes, StarredView } from './starred';
 import { UI_FONTS, NOTE_FONTS, UI_FONT_OPTIONS, NOTE_FONT_OPTIONS, NOTE_FONT_SIZE_MIN, NOTE_FONT_SIZE_MAX, adjustNoteFontSize, fontFaceRules, noteFontFamily, typographyRules } from './typography';
 
 type Snapshot = Pick<Data,'tasks'|'projects'|'sprints'> & {counts:Record<string,number>;syncedIds:string[];fileChange?:{path:string;before:string;after:string;created:boolean}};
@@ -20,6 +21,8 @@ export default class PrismPlugin extends Plugin {
   titlebarDrag=new TitlebarDrag();
   reading!: ReadingEnhancements;
   media!: MediaEffects;
+  starred!: StarredNotes;
+  private starActions=new WeakMap<ItemView,HTMLElement>();
   private subscribers=new Set<()=>void>();
   private documents=new Set<Document>();
   private writeQueue: Promise<void>=Promise.resolve();
@@ -39,14 +42,23 @@ export default class PrismPlugin extends Plugin {
   async onload(): Promise<void> {
     this.data=normalizeData(await this.loadData() as Partial<Data>|null|undefined);
     this.reading=new ReadingEnhancements(this);this.media=new MediaEffects(this);
+    this.starred=new StarredNotes(this);
     this.floats=new FloatingNotes(this);
     this.registerView(STUDIO_VIEW,leaf=>new StudioView(leaf,this));
+    this.registerView(STARRED_VIEW,leaf=>new StarredView(leaf,this));
     this.addRibbonIcon('panels-top-left','Prism Studio',()=>void this.openStudio('home'));
+    this.addRibbonIcon('star','Prism Studio · 星标笔记',()=>void this.openStarred());
     this.addRibbonIcon('layers','Prism Studio · 浮动笔记',()=>new NotePicker(this.app,file=>void this.floats.open(file)).open());
     this.addCommand({id:'open-home',name:'打开内容工作台',callback:()=>void this.openStudio('home')});
     this.addCommand({id:'customize-home',name:'自定义工作台组件',callback:()=>new HomeLayoutModal(this).open()});
     this.addCommand({id:'open-tasks',name:'打开任务管理',callback:()=>void this.openStudio('tasks')});
     this.addCommand({id:'open-pulse',name:'打开活动统计',callback:()=>void this.openStudio('pulse')});
+    this.addCommand({id:'open-starred-notes',name:'打开星标笔记',callback:()=>void this.openStarred()});
+    this.addCommand({id:'toggle-starred-note',name:'星标或取消星标当前笔记',checkCallback:checking=>{
+      const file=this.app.workspace.getActiveFile();if(!file || file.extension!=='md')return false;
+      if(!checking)void this.toggleStar(file);return true;
+    }});
+    this.addCommand({id:'clear-starred-notes',name:'清空星标笔记',callback:()=>void this.starred.clear()});
     this.addCommand({id:'new-task',name:'新建任务',callback:()=>this.newTask()});
     this.addCommand({id:'quick-capture',name:'快速收集笔记',callback:()=>new CaptureModal(this).open()});
     this.addCommand({id:'daily-note',name:'打开今天的日记',callback:()=>void this.dailyNote()});
@@ -77,7 +89,7 @@ export default class PrismPlugin extends Plugin {
     this.status.addClass('prism-status');this.registerDomEvent(this.status,'click',()=>void this.openStudio('pulse'));
     this.applySkin(document);
     this.registerEvent(this.app.workspace.on('window-open',(_win,win)=>this.applySkin(win.document)));
-    this.registerEvent(this.app.workspace.on('layout-change',()=>this.app.workspace.iterateAllLeaves(leaf=>this.applySkin(leaf.view.containerEl.ownerDocument))));
+    this.registerEvent(this.app.workspace.on('layout-change',()=>{this.app.workspace.iterateAllLeaves(leaf=>this.applySkin(leaf.view.containerEl.ownerDocument));this.starred.refresh();}));
     this.registerEvent(this.app.workspace.on('css-change',()=>this.refreshSkin()));
     this.registerEvent(this.app.workspace.on('editor-change',()=>{
       if(!this.data.settings.recordActivity)return;
@@ -87,7 +99,13 @@ export default class PrismPlugin extends Plugin {
     }));
     this.registerEvent(this.app.vault.on('create',file=>{if(file instanceof TFile && file.extension==='md')void this.trackFile(file,true);}));
     this.registerEvent(this.app.vault.on('modify',file=>{if(file instanceof TFile && file.extension==='md')void this.trackFile(file,false);}));
-    this.registerEvent(this.app.workspace.on('file-open',file=>{if(file instanceof TFile && file.extension==='md')this.trackOpen(file);}));
+    this.registerEvent(this.app.workspace.on('file-open',file=>{if(file instanceof TFile && file.extension==='md')this.trackOpen(file);this.syncStarAction();}));
+    this.registerEvent(this.app.workspace.on('active-leaf-change',()=>this.syncStarAction()));
+    this.registerEvent(this.app.workspace.on('file-menu',(menu,file)=>{
+      if(!(file instanceof TFile) || file.extension!=='md')return;
+      const starred=this.starred.is(file.path);
+      menu.addItem(item=>item.setTitle(starred?'取消星标':'星标此笔记').setIcon(starred?'star-off':'star').onClick(()=>void this.toggleStar(file)));
+    }));
     this.registerEvent(this.app.metadataCache.on('changed',()=>this.notify()));
     this.registerEvent(this.app.vault.on('rename',(file,oldPath)=>{
       const baseline=this.baselines.get(oldPath);if(baseline!==undefined){this.baselines.set(file.path,baseline);this.baselines.delete(oldPath);}
@@ -95,9 +113,10 @@ export default class PrismPlugin extends Plugin {
       for(const day of Object.values(this.data.activity))if(day.notes[oldPath]){day.notes[file.path]=day.notes[oldPath];delete day.notes[oldPath];}
       if(this.data.fileStats[oldPath]){this.data.fileStats[file.path]=this.data.fileStats[oldPath];delete this.data.fileStats[oldPath];}
       if(this.data.drafts[oldPath]){this.data.drafts[file.path]=this.data.drafts[oldPath];delete this.data.drafts[oldPath];}
+      if(this.data.starred[oldPath]!==undefined){this.data.starred[file.path]=this.data.starred[oldPath];delete this.data.starred[oldPath];}
       void this.save();this.notify();
     }));
-    this.registerEvent(this.app.vault.on('delete',file=>{this.baselines.delete(file.path);delete this.data.fileStats[file.path];this.notify();}));
+    this.registerEvent(this.app.vault.on('delete',file=>{this.baselines.delete(file.path);delete this.data.fileStats[file.path];delete this.data.starred[file.path];this.starred.refresh();this.notify();}));
     this.registerInterval(window.setInterval(()=>this.tick(),15000));
     this.app.workspace.onLayoutReady(()=>{
       void this.initializeBaselines();
@@ -107,7 +126,7 @@ export default class PrismPlugin extends Plugin {
   onunload(): void {
     this.active=false;
     this.floats.closeAll(true);
-    this.reading.destroy();this.media.destroy();this.glass.destroy();this.windowPin.destroy();this.titlebarDrag.destroy();
+    this.reading.destroy();this.media.destroy();this.starred.destroy();this.glass.destroy();this.windowPin.destroy();this.titlebarDrag.destroy();
     for(const doc of this.documents){doc.body.classList.remove('prism-skin','prism-note-wheel-zoom','prism-media-decks');delete doc.body.dataset.prismMaterial;delete doc.body.dataset.prismPalette;doc.getElementById('prism-dynamic-skin')?.remove();doc.getElementById('prism-font-faces')?.remove();}
     this.documents.clear();this.subscribers.clear();
   }
@@ -166,7 +185,7 @@ export default class PrismPlugin extends Plugin {
   }
   updateStatus(): void {this.status.setText(this.focusStarted?`Prism Studio · 专注 ${Math.floor(this.focusSeconds/60)} 分钟`:'Prism Studio');}
   subscribe(callback:()=>void):()=>void {this.subscribers.add(callback);return ()=>this.subscribers.delete(callback);}
-  notify(): void {for(const callback of this.subscribers)callback();}
+  notify(): void {for(const callback of this.subscribers)callback();this.syncStarActions();}
   async save(): Promise<void> {
     const snapshot=JSON.parse(JSON.stringify(this.data)) as Data;
     const job=this.writeQueue.catch(()=>undefined).then(()=>this.saveData(snapshot));this.writeQueue=job;
@@ -200,10 +219,12 @@ export default class PrismPlugin extends Plugin {
     doc.body.classList.toggle('prism-media-decks',this.data.settings.imageDecks);
     const s=this.data.settings;
     doc.body.classList.toggle('prism-tab-gap',s.tabGap);
+    doc.body.classList.toggle('prism-star-tint',s.starredTint);
+    doc.body.classList.toggle('prism-star-mark',s.starredMark);
     this.titlebarDrag.attach(doc,s.titlebarDragHeight);
     doc.body.dataset.prismMaterial=s.material;doc.body.dataset.prismPalette=s.palette;
     this.glass.apply(doc,s.enabled && s.nativeGlass && s.material!=='solid',s.material);
-    this.reading.attach(doc);this.media.attach(doc);
+    this.reading.attach(doc);this.media.attach(doc);this.starred.attach(doc);
     // Kept on createElement: createEl('style') is rejected by the no-forbidden-elements review rule.
     let style=doc.getElementById('prism-dynamic-skin');
     if(!style){style=doc.createElement('style');style.id='prism-dynamic-skin';doc.head.appendChild(style);}
@@ -216,8 +237,9 @@ export default class PrismPlugin extends Plugin {
     let background='none';
     const file=this.app.vault.getAbstractFileByPath(s.backgroundPath);
     if(file instanceof TFile && /^(png|jpg|jpeg|webp|gif|avif)$/i.test(file.extension)) background=`url(${JSON.stringify(this.app.vault.getResourcePath(file))})`;
-    const rules=`body.prism-skin, .prism-view, .prism-floating, .prism-modal {${tokenDeclarations(s)}--prism-strength:${s.intensity/100};--prism-opacity:${s.opacity/100};--prism-blur:${s.blur}px;--prism-radius:${s.radius}px;--prism-note-size:${s.fontSize}px;--prism-line-height:${s.lineHeight};--prism-note-width:${s.noteWidth}px;--prism-wallpaper:${background};}
-    body.theme-dark.prism-skin, .theme-dark .prism-view, .theme-dark .prism-floating, .theme-dark .prism-modal {${tokenDeclarations(s,true)}}
+    const starLight=starTone(s.palette),starDark=starTone(s.palette,true);
+    const rules=`body.prism-skin, .prism-view, .prism-floating, .prism-modal {${tokenDeclarations(s)}--prism-star-rgb:${starLight};--prism-star:rgb(${starLight});--prism-strength:${s.intensity/100};--prism-opacity:${s.opacity/100};--prism-blur:${s.blur}px;--prism-radius:${s.radius}px;--prism-note-size:${s.fontSize}px;--prism-line-height:${s.lineHeight};--prism-note-width:${s.noteWidth}px;--prism-wallpaper:${background};}
+    body.theme-dark.prism-skin, .theme-dark .prism-view, .theme-dark .prism-floating, .theme-dark .prism-modal {${tokenDeclarations(s,true)}--prism-star-rgb:${starDark};--prism-star:rgb(${starDark});}
     body.prism-note-wheel-zoom .workspace-leaf-content[data-type="markdown"] {--prism-note-size:${s.fontSize}px;--font-text-size:var(--prism-note-size);}${typographyRules(s)}`;
     if(style.textContent!==rules)style.textContent=rules;
   }
@@ -234,6 +256,44 @@ export default class PrismPlugin extends Plugin {
     let leaf=this.app.workspace.getLeavesOfType(STUDIO_VIEW)[0];
     if(!leaf){leaf=this.app.workspace.getLeaf('tab');await leaf.setViewState({type:STUDIO_VIEW,active:true,state:{tab}});}
     await this.app.workspace.revealLeaf(leaf);this.app.workspace.setActiveLeaf(leaf);if(leaf.view instanceof StudioView)leaf.view.selectTab(tab);
+  }
+  async openStarred():Promise<void>{
+    const existing=this.app.workspace.getLeavesOfType(STARRED_VIEW)[0];
+    if(existing){await this.app.workspace.revealLeaf(existing);this.app.workspace.setActiveLeaf(existing,{focus:true});return;}
+    const leaf=this.app.workspace.getLeftLeaf(false);
+    if(!leaf){new Notice('请先打开左侧边栏再查看星标笔记。');return;}
+    await leaf.setViewState({type:STARRED_VIEW,active:true});
+    this.app.workspace.setActiveLeaf(leaf,{focus:true});
+  }
+  /** Studio home with the 最近创作动态 section switched to its starred tab. */
+  async openStarredStudio():Promise<void>{
+    await this.openStudio('home');
+    const leaf=this.app.workspace.getLeavesOfType(STUDIO_VIEW)[0];
+    if(leaf?.view instanceof StudioView)leaf.view.selectStarredNotes();
+  }
+  async toggleStar(file:TFile,view?:ItemView):Promise<void>{
+    await this.starred.toggle(file.path);
+    if(view)this.syncStarAction(view);
+    else this.syncStarAction();
+  }
+  /** Mirrors a note's star state into the header action; create=false only refreshes known ones. */
+  syncStarAction(view?:ItemView,create=true):void{
+    const target=view??this.app.workspace.getActiveViewOfType(MarkdownView);
+    if(!(target instanceof MarkdownView) || !target.file)return;
+    let action=this.starActions.get(target);
+    if(!action){
+      if(!create)return;
+      action=target.addAction('star','星标此笔记',()=>{const file=target.file;if(file)void this.toggleStar(file,target);});
+      action.addClass('prism-star-action');
+      this.starActions.set(target,action);
+    }
+    const starred=this.starred.is(target.file.path),label=starred?'取消星标此笔记':'星标此笔记';
+    action.classList.toggle('is-active',starred);
+    action.setAttribute('aria-label',label);action.setAttribute('title',label);
+  }
+  /** Keeps every open note in sync, so unstarring from a list never leaves a stale header icon. */
+  private syncStarActions():void{
+    this.app.workspace.iterateAllLeaves(leaf=>{if(leaf.view instanceof MarkdownView)this.syncStarAction(leaf.view,false);});
   }
   newTask(lane:Lane='inbox'):TaskModal {const modal=new TaskModal(this,undefined,lane);modal.open();return modal;}
   editTask(task:Task):TaskModal {const modal=new TaskModal(this,task);modal.open();return modal;}
@@ -417,6 +477,10 @@ class PrismSettings extends PluginSettingTab {
     new Setting(el).setName('快速收集目录').addText(c=>c.setValue(s.captureFolder).onChange(v=>void this.plugin.updateSettings({captureFolder:v})));
     new Setting(el).setName('日记目录').addText(c=>c.setValue(s.dailyFolder).onChange(v=>void this.plugin.updateSettings({dailyFolder:v})));
     new Setting(el).setName('恢复皮肤默认设置').setDesc('保留任务、项目和活动记录。').addButton(c=>c.setButtonText('恢复默认').onClick(async()=>{await this.plugin.updateSettings(DEFAULT_SETTINGS);this.display();}));
+    new Setting(el).setName('星标笔记').setHeading();
+    new Setting(el).setName('文件名着色').setDesc('星标笔记在文件列表、星标页与工作台中使用当前配色的强调色显示；切换配色或明暗时自动跟随。').addToggle(c=>c.setValue(s.starredTint).onChange(v=>void this.plugin.updateSettings({starredTint:v})));
+    new Setting(el).setName('星标标记').setDesc('在星标笔记名称前显示一个小星形，与名称同色。').addToggle(c=>c.setValue(s.starredMark).onChange(v=>void this.plugin.updateSettings({starredMark:v})));
+    new Setting(el).setName('星标管理').setDesc(`当前 ${this.plugin.starred.count()} 篇。星标只保存在本插件数据中，不改写笔记内容；移动或重命名会自动跟随。`).addButton(c=>c.setButtonText('打开星标笔记').onClick(()=>void this.plugin.openStarred())).addButton(c=>c.setButtonText('清空星标').onClick(async()=>{await this.plugin.starred.clear();this.display();}));
     new Setting(el).setName('快捷入口').setHeading();
     new Setting(el).setName('任务与项目').addButton(c=>c.setButtonText('打开任务').onClick(()=>void this.plugin.openStudio('tasks'))).addButton(c=>c.setButtonText('管理项目').onClick(()=>this.plugin.manage('projects')));
     new Setting(el).setName('Markdown 任务').addButton(c=>c.setButtonText('导出任务').onClick(()=>void this.plugin.exportTasks()));
