@@ -211,6 +211,47 @@ module.exports=class PrismNativeHarness extends Plugin{
         // Hand the workspace back to the reading fixture the following checks rely on.
         leaf.detach();await wait(200);if(mediaLeaf){this.app.workspace.setActiveLeaf(mediaLeaf,{focus:true});await wait(300);}
       });
+      await check('Code block scrollbar: drags the open block without blurring the editor',async()=>{
+        const code=Array.from({length:120},(_,i)=>`const row${i} = ${i};`).join('\n');
+        const body='# Code scroll\n\n```js\n'+code+'\n```\n\nTail paragraph.\n';
+        const file=await this.app.vault.create('Native code scroll.md',body);
+        const leaf=this.app.workspace.getLeaf('tab');await leaf.openFile(file);
+        await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'source',source:false}});
+        this.app.workspace.setActiveLeaf(leaf,{focus:true});await wait(1000);
+        const view=leaf.view,cm=view.editor.cm;assert(cm,'CodeMirror view missing');
+        view.editor.focus();view.editor.setCursor({line:60,ch:0});await wait(800);
+        const bar=document.querySelector('.prism-code-scroll');assert(bar,'Code block scrollbar missing');
+        assert(!bar.hidden,'Code block scrollbar hidden while the caret is inside the fence');
+        const label=bar.querySelector('.prism-code-scroll-label').textContent;
+        assert(label==='js · 120 行',`Code block label is wrong: ${label}`);
+        assert(view.containerEl.querySelectorAll('.cm-line.HyperMD-codeblock').length,'Block is not open for editing');
+        const thumb=bar.querySelector('.prism-code-scroll-thumb'),track=bar.querySelector('.prism-code-scroll-track');
+        const before=cm.scrollDOM.scrollTop,caret=view.editor.getCursor();
+        const opts={bubbles:true,cancelable:true,pointerId:7,pointerType:'mouse',button:0,isPrimary:true};
+        const tr=thumb.getBoundingClientRect(),kr=track.getBoundingClientRect(),x=Math.round(tr.left+2);
+        const at=fraction=>Math.round(kr.top+kr.height*fraction);
+        thumb.dispatchEvent(new PointerEvent('pointerdown',{...opts,clientX:x,clientY:Math.round(tr.top+tr.height/2)}));
+        window.dispatchEvent(new PointerEvent('pointermove',{...opts,clientX:x,clientY:at(.65)}));
+        await wait(300);window.dispatchEvent(new PointerEvent('pointerup',{...opts,clientX:x,clientY:at(.65)}));await wait(300);
+        const after=cm.scrollDOM.scrollTop;
+        assert(after>before+400,`Code scrollbar did not scroll the block: ${before} -> ${after}`);
+        assert(document.activeElement?.classList.contains('cm-content'),'Dragging the code scrollbar blurred the editor');
+        assert(view.editor.getCursor().line===caret.line,'Caret moved while dragging the code scrollbar');
+        assert(view.containerEl.querySelectorAll('.cm-line.HyperMD-codeblock').length,'Block collapsed back to its widget while dragging');
+        // Dragging back to the start returns to the top of the fence, not the top of the note.
+        thumb.dispatchEvent(new PointerEvent('pointerdown',{...opts,clientX:x,clientY:Math.round(tr.top+tr.height/2)}));
+        window.dispatchEvent(new PointerEvent('pointermove',{...opts,clientX:x,clientY:at(0)}));
+        await wait(250);window.dispatchEvent(new PointerEvent('pointerup',{...opts,clientX:x,clientY:at(0)}));await wait(250);
+        assert(cm.scrollDOM.scrollTop<before+120,`Code scrollbar did not return to the block start: ${cm.scrollDOM.scrollTop}`);
+        await prism.updateSettings({codeBlockScroll:false});await wait(300);
+        assert(document.querySelector('.prism-code-scroll').hidden,'Code scrollbar ignored its setting');
+        await prism.updateSettings({codeBlockScroll:true});await wait(300);
+        assert(!document.querySelector('.prism-code-scroll').hidden,'Code scrollbar did not come back when re-enabled');
+        view.editor.setCursor({line:1,ch:0});await wait(500);
+        assert(document.querySelector('.prism-code-scroll').hidden,'Code scrollbar stayed visible outside the fence');
+        leaf.detach();await this.app.vault.delete(file);await wait(200);
+        if(mediaLeaf){this.app.workspace.setActiveLeaf(mediaLeaf,{focus:true});await wait(300);}
+      });
       await check('Reading images: perspective motion, auto grouping, sticky stack, explicit deck and static fallback',async()=>{
         assert(mediaFile&&mediaLeaf,'Reading fixture missing');const scroll=mediaLeaf.view.containerEl.querySelector('.markdown-preview-view');
         scroll.scrollTop=0;await wait(300);prism.media.refresh();await wait(200);const decks=[...scroll.querySelectorAll('.prism-deck')];if(!decks.length)report.mediaDOM=scroll.innerHTML;assert(decks.some(el=>el.dataset.prismExplicit!=='true'),'Automatic deck missing');

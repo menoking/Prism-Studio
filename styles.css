@@ -512,3 +512,34 @@ body.prism-star-mark .prism-starred.prism-note-chip::before { margin-right: 0; }
 .prism-starred-empty-icon svg { width: 26px; height: 26px; }
 .prism-starred-empty p { margin: 0; font-size: var(--font-ui-small); color: var(--text-normal); }
 .prism-starred-empty small { font-size: var(--font-ui-smaller); line-height: 1.7; color: var(--text-faint); }
+
+/* A long code block gets a scrollbar of its own. Dragging it scrolls that block
+   programmatically, so the editor never blurs and Live Preview keeps the block open
+   instead of swapping it back to its rendered widget (which loses the caret). */
+.prism-code-scroll {
+  position: fixed; z-index: 58; display: flex; justify-content: center; width: 12px;
+  touch-action: none; cursor: pointer; opacity: .5;
+  transition: opacity .16s ease, width .16s ease;
+}
+.prism-code-scroll[hidden] { display: none; }
+.prism-code-scroll:hover, .prism-code-scroll.is-dragging { opacity: 1; width: 15px; }
+.prism-code-scroll-track { position: relative; width: 4px; border-radius: 8px; background: rgb(var(--prism-accent-rgb, 79 129 155) / .13); transition: width .16s ease; }
+.prism-code-scroll:hover .prism-code-scroll-track, .prism-code-scroll.is-dragging .prism-code-scroll-track { width: 5px; }
+.prism-code-scroll-thumb {
+  position: absolute; left: 50%; margin-left: -3px; width: 6px; min-height: 30px;
+  border-radius: 8px; background: rgb(var(--prism-accent-rgb, 79 129 155) / .45);
+  transition: background .16s ease, width .16s ease, margin-left .16s ease;
+}
+.prism-code-scroll:hover .prism-code-scroll-thumb, .prism-code-scroll.is-dragging .prism-code-scroll-thumb {
+  width: 8px; margin-left: -4px; background: var(--prism-accent, rgb(var(--prism-accent-rgb, 79 129 155)));
+}
+.prism-code-scroll-label {
+  position: absolute; top: 2px; right: 15px; white-space: nowrap; padding: 3px 8px;
+  border-radius: 6px; background: rgb(var(--prism-surface-rgb, 255 255 255) / .92);
+  color: var(--prism-muted, var(--text-muted)); font-size: 10px; letter-spacing: .02em;
+  box-shadow: 0 3px 12px rgb(0 0 0 / .16); opacity: 0; pointer-events: none; transition: opacity .16s ease;
+}
+.prism-code-scroll:hover .prism-code-scroll-label, .prism-code-scroll.is-dragging .prism-code-scroll-label { opacity: 1; }
+/* While the caret is inside a long code block its own bar is the active control;
+   the note-wide rail steps back so the two never compete for the same edge. */
+body.prism-code-scrolling .prism-reading-rail:not(:hover):not(.is-dragging) { opacity: .25; transition: opacity .2s ease; }

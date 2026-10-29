@@ -60,7 +60,7 @@ export interface SkinSettings {
   nativeGlass: boolean; readingRail: boolean; imageMotion: boolean; imageDecks: boolean;
   imageFit: 'natural'|'cover';
   titlebarDragHeight: number; tabGap: boolean;
-  starredTint: boolean; starredMark: boolean;
+  starredTint: boolean; starredMark: boolean; codeBlockScroll: boolean;
   homeWidgets: HomeVisibility;
 }
 export interface Data {
@@ -78,7 +78,7 @@ export const DEFAULT_SETTINGS: SkinSettings = {
   captureFolder: 'Prism/Inbox', dailyFolder: 'Prism/Daily',
   nativeGlass: true, readingRail: true, imageMotion: true, imageDecks: true,
   imageFit: 'natural', titlebarDragHeight: 10, tabGap: true,
-  starredTint: true, starredMark: true,
+  starredTint: true, starredMark: true, codeBlockScroll: true,
   homeWidgets: normalizeHomeWidgets(undefined)
 };
 export function localDay(value: Date | number = new Date()): string {
@@ -150,6 +150,7 @@ export function normalizeData(raw: Partial<Data> | null | undefined): Data {
   settings.tabGap=settings.tabGap!==false;
   settings.starredTint=settings.starredTint!==false;
   settings.starredMark=settings.starredMark!==false;
+  settings.codeBlockScroll=settings.codeBlockScroll!==false;
   const fileStats: Record<string, FileStats> = {};
   if(raw?.fileStats && typeof raw.fileStats==='object'){
     for(const [path,stats] of Object.entries(raw.fileStats)){

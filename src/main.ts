@@ -10,6 +10,7 @@ import { ReadingEnhancements } from './reading';
 import { MediaEffects } from './media';
 import { PALETTES, PALETTE_OPTIONS, MATERIAL_OPTIONS, tokenDeclarations, starTone } from './appearance';
 import { STARRED_VIEW, StarredNotes, StarredView } from './starred';
+import { CodeBlockScroller } from './code-scroll';
 import { UI_FONTS, NOTE_FONTS, UI_FONT_OPTIONS, NOTE_FONT_OPTIONS, NOTE_FONT_SIZE_MIN, NOTE_FONT_SIZE_MAX, adjustNoteFontSize, fontFaceRules, noteFontFamily, typographyRules } from './typography';
 
 type Snapshot = Pick<Data,'tasks'|'projects'|'sprints'> & {counts:Record<string,number>;syncedIds:string[];fileChange?:{path:string;before:string;after:string;created:boolean}};
@@ -23,6 +24,7 @@ export default class PrismPlugin extends Plugin {
   media!: MediaEffects;
   starred!: StarredNotes;
   private starActions=new WeakMap<ItemView,HTMLElement>();
+  private codeScrollers=new Map<Document,CodeBlockScroller>();
   private subscribers=new Set<()=>void>();
   private documents=new Set<Document>();
   private writeQueue: Promise<void>=Promise.resolve();
@@ -100,7 +102,7 @@ export default class PrismPlugin extends Plugin {
     this.registerEvent(this.app.vault.on('create',file=>{if(file instanceof TFile && file.extension==='md')void this.trackFile(file,true);}));
     this.registerEvent(this.app.vault.on('modify',file=>{if(file instanceof TFile && file.extension==='md')void this.trackFile(file,false);}));
     this.registerEvent(this.app.workspace.on('file-open',file=>{if(file instanceof TFile && file.extension==='md')this.trackOpen(file);this.syncStarAction();}));
-    this.registerEvent(this.app.workspace.on('active-leaf-change',()=>this.syncStarAction()));
+    this.registerEvent(this.app.workspace.on('active-leaf-change',()=>{this.syncStarAction();this.syncCodeScroller();}));
     this.registerEvent(this.app.workspace.on('file-menu',(menu,file)=>{
       if(!(file instanceof TFile) || file.extension!=='md')return;
       const starred=this.starred.is(file.path);
@@ -127,6 +129,8 @@ export default class PrismPlugin extends Plugin {
     this.active=false;
     this.floats.closeAll(true);
     this.reading.destroy();this.media.destroy();this.starred.destroy();this.glass.destroy();this.windowPin.destroy();this.titlebarDrag.destroy();
+    for(const scroller of this.codeScrollers.values())scroller.destroy();
+    this.codeScrollers.clear();
     for(const doc of this.documents){doc.body.classList.remove('prism-skin','prism-note-wheel-zoom','prism-media-decks');delete doc.body.dataset.prismMaterial;delete doc.body.dataset.prismPalette;doc.getElementById('prism-dynamic-skin')?.remove();doc.getElementById('prism-font-faces')?.remove();}
     this.documents.clear();this.subscribers.clear();
   }
@@ -195,7 +199,7 @@ export default class PrismPlugin extends Plugin {
     this.data.settings=normalizeData({settings:{...this.data.settings,...values}}).settings;
     if(!this.data.settings.recordActivity)this.focusStarted=0;
     this.refreshSkin();await this.save();this.notify();this.updateStatus();
-    this.media.refresh();this.reading.refresh();
+    this.media.refresh();this.reading.refresh();this.syncCodeScroller();
   }
   private attachNoteWheelZoom(doc:Document):void {
     const onWheel=(event:WheelEvent)=>{
@@ -225,6 +229,8 @@ export default class PrismPlugin extends Plugin {
     doc.body.dataset.prismMaterial=s.material;doc.body.dataset.prismPalette=s.palette;
     this.glass.apply(doc,s.enabled && s.nativeGlass && s.material!=='solid',s.material);
     this.reading.attach(doc);this.media.attach(doc);this.starred.attach(doc);
+    // A detached overlay per document: it becomes a scrollbar for the code block under the caret.
+    if(!this.codeScrollers.has(doc))this.codeScrollers.set(doc,new CodeBlockScroller(this,doc));
     // Kept on createElement: createEl('style') is rejected by the no-forbidden-elements review rule.
     let style=doc.getElementById('prism-dynamic-skin');
     if(!style){style=doc.createElement('style');style.id='prism-dynamic-skin';doc.head.appendChild(style);}
@@ -244,6 +250,13 @@ export default class PrismPlugin extends Plugin {
     if(style.textContent!==rules)style.textContent=rules;
   }
   refreshSkin(): void {for(const doc of this.documents){if(!doc.defaultView || doc.defaultView.closed){this.documents.delete(doc);continue;}this.applySkin(doc);}}
+  /** Re-evaluate which code block (if any) owns the caret in every open document. */
+  syncCodeScroller(): void {
+    for(const [doc,scroller] of this.codeScrollers){
+      if(!doc.defaultView || doc.defaultView.closed){scroller.destroy();this.codeScrollers.delete(doc);continue;}
+      scroller.update();
+    }
+  }
   cyclePalette():void {
     const palettes=Object.keys(PALETTES) as Array<Data['settings']['palette']>;
     void this.updateSettings({palette:palettes[(palettes.indexOf(this.data.settings.palette)+1)%palettes.length]});
@@ -468,6 +481,7 @@ class PrismSettings extends PluginSettingTab {
     new Setting(el).setName('窗口拖动热区').setDesc('标签页铺满标题栏后，能拖动的位置只剩几像素。这里在窗口最上方留一条隐形热区，任何标签数量下都能拖动；双击可最大化或还原，右侧窗口按钮不受影响。').addDropdown(c=>c.addOptions({'0':'关闭','8':'8 px（保守）','10':'10 px（默认）','14':'14 px（宽松）'}).setValue(String(s.titlebarDragHeight)).onChange(v=>void this.plugin.updateSettings({titlebarDragHeight:Number(v)})));
     new Setting(el).setName('标签页间隙').setDesc('在标签之间留 6 px 空隙，每条缝隙都能拖动窗口，同时让标签更透气。').addToggle(c=>c.setValue(s.tabGap).onChange(v=>void this.plugin.updateSettings({tabGap:v})));
     new Setting(el).setName('章节滚动条').setDesc('阅读与编辑视图显示刻度、章节标记和悬浮小标题。支持拖动、点击刻度及键盘定位。').addToggle(c=>c.setValue(s.readingRail).onChange(v=>void this.plugin.updateSettings({readingRail:v})));
+    new Setting(el).setName('代码块滚动条').setDesc('光标位于较长的代码块内时，在代码右侧显示专属滚动条。拖动它只滚动这段代码，编辑器不会失焦，实时预览也不会把代码块缩回渲染结果。').addToggle(c=>c.setValue(s.codeBlockScroll).onChange(v=>void this.plugin.updateSettings({codeBlockScroll:v})));
     new Setting(el).setName('图片滚动动效').setDesc('单图带轻微透视入场；多图卡片随滚动进场、缩小和堆叠。尊重系统减少动画设置。').addToggle(c=>c.setValue(s.imageMotion).onChange(v=>void this.plugin.updateSettings({imageMotion:v})));
     new Setting(el).setName('图片堆叠').setDesc('阅读视图中的连续图片自动组成层叠卡组，同一行多张图片也可识别；支持 prism-deck。淡色图标可展开或收起，关闭动效时平铺显示。').addToggle(c=>c.setValue(s.imageDecks).onChange(v=>void this.plugin.updateSettings({imageDecks:v})));
     new Setting(el).setName('图片卡片比例').setDesc('原比例叠放完整保留图片内容；铺满卡片会居中裁切。展开后两种模式都显示完整原图。').addDropdown(c=>c.addOptions({natural:'原比例叠放',cover:'铺满卡片'}).setValue(s.imageFit).onChange(v=>void this.plugin.updateSettings({imageFit:v as typeof s.imageFit})));
