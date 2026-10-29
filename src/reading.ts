@@ -84,8 +84,10 @@ class ReadingRail {
   private jump(mark:Mark):void {
     const view=this.editor();
     if(mark.line!==undefined && view && this.scroll.classList.contains('cm-scroller')){view.editor.scrollIntoView({from:{line:mark.line,ch:0},to:{line:mark.line,ch:0}},true);}
-    else if(view?.file){void this.plugin.app.workspace.openLinkText(`${view.file.path}#${mark.title}`,view.file.path,false);}
-    else this.scroll.scrollTop=mark.offset;
+    // Reading view used to jump with openLinkText, which re-opened the note: an open code block
+    // collapsed, the caret's place was lost and the preview re-rendered on every tick. The
+    // heading offsets are already measured against this scroller, so scroll it directly.
+    else this.scroll.scrollTo({top:Math.max(0,mark.offset)});
     this.schedule();
   }
   private schedule():void {if(!this.frame)this.frame=this.win.requestAnimationFrame(()=>{this.frame=0;this.paint();});}
@@ -93,6 +95,9 @@ class ReadingRail {
     const r=this.scroll.getBoundingClientRect(),height=Math.min(r.bottom,this.win.innerHeight)-Math.max(0,r.top)-20;
     const max=this.scroll.scrollHeight-this.scroll.clientHeight;
     const visible=this.scroll.isConnected && r.width>40 && height>70 && max>2 && !this.scroll.closest('.is-editing');
+    // The native bar is only suppressed while the rail can replace it. Hiding it unconditionally
+    // left source mode and narrow panes with no scrollbar at all.
+    this.scroll.classList.toggle('prism-scroll-managed',visible);
     this.el.hidden=!visible;if(!visible)return;
     this.el.style.left=`${r.right-25}px`;this.el.style.top=`${Math.max(0,r.top)+10}px`;this.el.style.height=`${height}px`;
     this.el.style.zIndex=String(Number(this.scroll.closest<HTMLElement>('.prism-floating')?.style.zIndex||50)+1);

@@ -350,8 +350,14 @@ button.prism-stat:hover { border-color: var(--prism-accent); background: var(--p
 @media (prefers-reduced-transparency: reduce) { .prism-view, .prism-modal, .prism-floating, body.prism-skin { --prism-opacity: 1 !important; --prism-soft: var(--prism-solid); --prism-blur: 0px !important; } }
 
 /* The note keeps its real scrolling element. This overlay adds a ruler and a heading map. */
-.prism-scroll-managed { scrollbar-width: none !important; }
-.prism-scroll-managed::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
+/* Only the vertical bar is replaced by the rail. The same scroller also serves wide content
+   (code, tables, embeds), so its horizontal bar has to stay available. */
+.prism-scroll-managed::-webkit-scrollbar:vertical { width: 0; height: 0; }
+.prism-scroll-managed::-webkit-scrollbar:horizontal { height: 7px; }
+.prism-scroll-managed::-webkit-scrollbar-thumb:horizontal { border-radius: 8px; background: rgb(var(--prism-accent-rgb) / .4); }
+/* Inner scrollers (code blocks, tables, embeds) never lose their own bars. */
+.prism-scroll-managed pre, .prism-scroll-managed pre code, .prism-scroll-managed table,
+.prism-scroll-managed .markdown-embed-content, .prism-scroll-managed .cm-embed-block { scrollbar-width: auto; }
 .prism-reading-rail {
   position: fixed; width: 22px; color: var(--prism-ink,#263843); cursor: pointer; touch-action: none;
   --prism-rail-color: var(--prism-accent,#4f819b);

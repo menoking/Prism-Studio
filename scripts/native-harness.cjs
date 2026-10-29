@@ -186,6 +186,31 @@ module.exports=class PrismNativeHarness extends Plugin{
         await mediaLeaf.setViewState({type:'markdown',state:{file:mediaFile.path,mode:'source'},active:true});await wait(400);prism.reading.refresh();await wait(100);const source=mediaLeaf.view.containerEl.querySelector('.cm-scroller');assert(source.classList.contains('prism-scroll-managed'),'Source scrollbar not enhanced');
         await mediaLeaf.setViewState({type:'markdown',state:{file:mediaFile.path,mode:'preview'},active:true});await wait(600);
       });
+      await check('Scrollbars: rail replaces only the vertical bar, and headings scroll without re-rendering',async()=>{
+        const para='Paragraph that keeps the note long enough to scroll.\n\n';
+        const body=`# Wide note\n\n<div style="width:1700px;height:20px;background:#dbeafe"></div>\n\n${para.repeat(6)}## Second\n\n${para.repeat(8)}## Third\n\n${para.repeat(6)}\`\`\`js\nconst value = 1;\n\`\`\`\n\n${para.repeat(4)}`;
+        const file=await this.app.vault.create('Native wide scroll.md',body);
+        const leaf=this.app.workspace.getLeaf('tab');await leaf.openFile(file);
+        await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'},active:true});this.app.workspace.setActiveLeaf(leaf,{focus:true});
+        await wait(900);prism.reading.refresh();await wait(250);
+        const scroll=leaf.view.containerEl.querySelector('.markdown-preview-view');
+        assert(scroll.classList.contains('prism-scroll-managed'),'Rail did not take over the note scroller');
+        assert(scroll.offsetWidth-scroll.clientWidth===0,'Vertical bar still laid out beside the rail');
+        assert(scroll.offsetHeight-scroll.clientHeight>0,'Horizontal scrollbar disappeared together with the vertical one');
+        scroll.scrollLeft=400;assert(scroll.scrollLeft>0,'Wide note can no longer pan sideways');scroll.scrollLeft=0;
+        const pre=scroll.querySelector('pre');assert(pre&&getComputedStyle(pre).scrollbarWidth==='auto','Inner code block lost its own scrollbar');
+        const section=scroll.querySelector('.markdown-preview-section');assert(section,'Preview section missing');
+        const rail=[...document.querySelectorAll('.prism-reading-rail')].find(el=>!el.hidden&&el.querySelector('[aria-label="Third"]'));assert(rail,'Rail tick missing for the last heading');
+        scroll.scrollTop=0;rail.querySelector('[aria-label="Third"]').click();await wait(300);
+        assert(scroll.scrollTop>200,'Heading click did not scroll the note');
+        assert(section.isConnected,'Heading click re-rendered the note instead of scrolling it');
+        await prism.updateSettings({readingRail:false});await wait(300);
+        assert(scroll.offsetWidth-scroll.clientWidth>0,'Native scrollbar not restored when the rail is off');
+        await prism.updateSettings({readingRail:true});await wait(300);
+        assert(scroll.classList.contains('prism-scroll-managed'),'Scroller not managed again after re-enabling the rail');
+        // Hand the workspace back to the reading fixture the following checks rely on.
+        leaf.detach();await wait(200);if(mediaLeaf){this.app.workspace.setActiveLeaf(mediaLeaf,{focus:true});await wait(300);}
+      });
       await check('Reading images: perspective motion, auto grouping, sticky stack, explicit deck and static fallback',async()=>{
         assert(mediaFile&&mediaLeaf,'Reading fixture missing');const scroll=mediaLeaf.view.containerEl.querySelector('.markdown-preview-view');
         scroll.scrollTop=0;await wait(300);prism.media.refresh();await wait(200);const decks=[...scroll.querySelectorAll('.prism-deck')];if(!decks.length)report.mediaDOM=scroll.innerHTML;assert(decks.some(el=>el.dataset.prismExplicit!=='true'),'Automatic deck missing');
