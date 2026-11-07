@@ -12,6 +12,7 @@ export class StudioView extends ItemView{
   private lane:Lane='today';private projectId='';private sprintId='';private query='';private board=false;
   private metric='score';private selectedDay=localDay();private reviewTab='today';
   private createdView:'today'|'week'|'month'|'modified'|'starred'='today';private createdNonEmptyOnly=false;
+  private createdTag='';
   private rangeWeeks=52;
   private unsubscribe?:()=>void;private renderTimer?:number;
   constructor(leaf:WorkspaceLeaf,public plugin:PrismPlugin){super(leaf);}
@@ -176,13 +177,20 @@ export class StudioView extends ItemView{
     if(files.length>8)button(section,`查看全部 ${files.length} 篇`,'arrow-up-right',()=>new FilteredNotes(this.plugin,files,title).open());
   }
   private createdNotesSection(parent:HTMLElement,createdFiles:TFile[],modifiedFiles:TFile[]):void{
-    const now=Date.now(),starredFiles=this.plugin.starred.files();
+    const now=Date.now();let starredFiles=this.plugin.starred.files();
     if(this.createdNonEmptyOnly){const nonEmpty=(file:TFile)=>file.stat.size>0;createdFiles=createdFiles.filter(nonEmpty);modifiedFiles=modifiedFiles.filter(nonEmpty);}
+    const tagRegistry=this.plugin.tags.registry();
+    if(this.createdTag&&!tagRegistry.some(tag=>tag.name===this.createdTag))this.createdTag='';
+    // The dropdown narrows every tab, including the starred one, to one tag.
+    if(this.createdTag){
+      const tagged=(file:TFile)=>this.plugin.tags.of(file.path).includes(this.createdTag);
+      createdFiles=createdFiles.filter(tagged);modifiedFiles=modifiedFiles.filter(tagged);starredFiles=starredFiles.filter(tagged);
+    }
     const createdGroups=([
       ['today','今天创建','sun'],['week','近七天创建','calendar-days'],['month','近一月创建','calendar-range']
     ] as const).map(([range,label,name])=>({range,label,name,files:createdFiles.filter(file=>inCreatedNoteRange(file.stat.ctime,range,now))}));
     const createdCount=createdGroups.find(group=>group.range==='month')?.files.length||0;
-    const section=this.homeSection(parent,'最近创作动态','history',`近 30 天创建 ${createdCount} 篇 · 修改 ${modifiedFiles.length} 篇 · 星标 ${starredFiles.length} 篇`);
+    const section=this.homeSection(parent,'最近创作动态','history',`近 30 天创建 ${createdCount} 篇 · 修改 ${modifiedFiles.length} 篇 · 星标 ${starredFiles.length} 篇${this.createdTag?` · 标签「${this.createdTag}」`:''}`);
     section.dataset.prismWidget='createdNotes';section.addClass('prism-created-notes','prism-home-wide');
     const latest=createdFiles[0],latestModified=modifiedFiles[0];
     if(!latest&&!latestModified&&!starredFiles.length){empty(section,'知识库还没有可展示的创建、修改或星标记录。','file-clock');return;}
@@ -204,15 +212,21 @@ export class StudioView extends ItemView{
     const toolbar=section.createDiv({cls:'prism-created-toolbar'});
     const tabs=toolbar.createDiv({cls:'prism-created-tabs',attr:{role:'tablist','aria-label':'创作动态时间范围'}});
     for(const view of views){const b=button(tabs,`${view.label} ${view.files.length}`,view.name,()=>{this.createdView=view.range;this.render();},this.createdView===view.range?'is-active':'');b.setAttribute('aria-pressed',String(this.createdView===view.range));}
+    const select=toolbar.createEl('select',{cls:'prism-tag-select',attr:{'aria-label':'按标签筛选创作动态','data-prism-tag-filter':'true'}});
+    select.createEl('option',{value:'',text:tagRegistry.length?'全部标签':'暂无标签'});
+    for(const tag of tagRegistry)select.createEl('option',{value:tag.name,text:`${tag.name} · ${tag.count}`});
+    select.value=this.createdTag;select.disabled=!tagRegistry.length;
+    select.addEventListener('change',()=>{this.createdTag=select.value;this.render();});
     const toggle=toolbar.createEl('label',{cls:'prism-created-filter'});const checkbox=toggle.createEl('input',{attr:{type:'checkbox','aria-label':'只显示非空笔记'}});checkbox.checked=this.createdNonEmptyOnly;
     toggle.createSpan({text:'只显示非空笔记'});checkbox.addEventListener('change',()=>{this.createdNonEmptyOnly=checkbox.checked;this.render();});
     const weight=(file:TFile)=>{const stats=this.plugin.data.fileStats[file.path];return (stats?.opens||0)+(stats?.edits||0);};
     const maxWeight=Math.max(...active.files.map(weight),0);
     const grid=section.createDiv({cls:`prism-chip-grid ${active.range==='modified'?'is-modified':''}`});
-    if(!active.files.length)grid.createDiv({cls:'prism-created-empty',text:active.range==='modified'?'最近没有改动记录':active.range==='starred'?'还没有星标笔记。在笔记右上角点星标，或在文件列表右键添加。':'该时间段暂无创建记录'});
+    if(!active.files.length)grid.createDiv({cls:'prism-created-empty',text:this.createdTag?`标签「${this.createdTag}」在这个分类下没有笔记。`:active.range==='modified'?'最近没有改动记录':active.range==='starred'?'还没有星标笔记。在笔记右上角点星标，或在文件列表右键添加。':'该时间段暂无创建记录'});
     for(const file of active.files.slice(0,60)){
       const value=weight(file),level=activityLevel(value,maxWeight),stats=this.plugin.data.fileStats[file.path];
-      const chip=grid.createEl('button',{cls:`prism-note-chip level-${level}${this.plugin.starred.is(file.path)?' prism-starred':''}`,attr:{type:'button',title:`${file.path}\n打开 ${stats?.opens||0} 次 · 编辑 ${stats?.edits||0} 次`,'aria-label':`打开笔记：${file.basename}`}});
+      const tags=this.plugin.tags.of(file.path);
+      const chip=grid.createEl('button',{cls:`prism-note-chip level-${level}${this.plugin.starred.is(file.path)?' prism-starred':''}`,attr:{type:'button',title:`${file.path}\n打开 ${stats?.opens||0} 次 · 编辑 ${stats?.edits||0} 次${tags.length?`\n标签：${tags.join(' · ')}`:''}`,'aria-label':`打开笔记：${file.basename}`}});
       chip.createSpan({cls:'prism-note-chip-name',text:file.basename});
       if(value>0)chip.createSpan({cls:'prism-note-chip-count',text:String(value)});
       chip.addEventListener('click',()=>this.plugin.openFile(file.path));

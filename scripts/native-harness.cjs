@@ -21,6 +21,7 @@ module.exports=class PrismNativeHarness extends Plugin{
     try{
       const remote=require('@electron/remote');const win=remote.getCurrentWindow();
       win.show();win.setFullScreen(false);win.unmaximize();win.setBounds({x:80,y:25,width:1280,height:900});await wait(300);
+      const capture=async(name,target=win)=>{const image=await target.capturePage();assert(!image.isEmpty(),'Capture was empty');fs.writeFileSync(path.join(out,`${name}.png`),image.toPNG());report.screenshots.push(`${name}.png`);save();};
       const screenshot=async(name,target=win)=>{document.querySelectorAll('.notice').forEach(el=>el.remove());const otherLeaves=[];this.app.workspace.iterateAllLeaves(leaf=>{if(leaf!==this.app.workspace.activeLeaf && ['markdown','empty','prism-studio-view'].includes(leaf.view.getViewType()))otherLeaves.push(leaf);});for(const leaf of otherLeaves)leaf.detach();await wait(500);const image=await target.capturePage();assert(!image.isEmpty(),'Screenshot was empty');fs.writeFileSync(path.join(out,`${name}.png`),image.toPNG());report.screenshots.push(`${name}.png`);save();};
       await until(()=>this.app.plugins.getPlugin('prism-studio'));prism=this.app.plugins.getPlugin('prism-studio');
       window.__prismNativeTesting=true;
@@ -348,6 +349,98 @@ module.exports=class PrismNativeHarness extends Plugin{
         await prism.updateSettings({palette:'blue'});await wait(150);
         if(nav && nav.view.getViewType()==='prism-starred-view')await nav.setViewState({type:'file-explorer'});
         await prism.openStudio('home');
+      });
+      await check('Note tags: pill row under the title, explorer hover, palette tint and studio filter',async()=>{
+        for(const name of ['Tagged note.md','Tagged peer.md']){
+          const existing=this.app.vault.getAbstractFileByPath(name);if(existing)await this.app.vault.delete(existing,true);
+        }
+        const waitFor=async(fn,label)=>{const stop=Date.now()+6000;while(Date.now()<stop){if(fn())return;await wait(80);}throw new Error(`Timed out: ${label}`);};
+        const first=await this.app.vault.create('Tagged note.md','# Tagged\n\nBody.\n\n## Section\n\nMore.\n');
+        const peer=await this.app.vault.create('Tagged peer.md','# Peer\n\nBody.\n');
+        await prism.tags.add(first.path,'机器学习',true);
+        await prism.tags.add(peer.path,'机器学习',true);
+        await prism.tags.add(peer.path,'实验记录',true);
+        const open=async file=>{const leaf=this.app.workspace.getLeaf('tab');await leaf.openFile(file);await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});await wait(900);return this.app.workspace.getActiveViewOfType(MarkdownView);};
+        const view=await open(first);assert(view&&view.file?.path===first.path,'Tagged note did not open');
+        // The documented path: the plus under the title, then typing a tag.
+        await waitFor(()=>view.containerEl.querySelector('.prism-tag-add'),'add button');
+        view.containerEl.querySelector('.prism-tag-add').click();
+        await waitFor(()=>document.querySelector('.prism-tag-modal .prism-tag-input'),'tag modal');
+        const tagInput=document.querySelector('.prism-tag-modal .prism-tag-input');
+        tagInput.value='机器学习';tagInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+        await wait(600);
+        assert(prism.tags.of(first.path).includes('机器学习'),'Typed tag was not saved');
+        closeModals();await wait(300);
+        await prism.tags.add(peer.path,'机器学习',true);
+        await prism.tags.add(peer.path,'实验记录',true);
+        await waitFor(()=>view.containerEl.querySelector('.prism-tag-row'),'first row');
+        const row=()=>view.containerEl.querySelector('.prism-tag-row');
+        assert(row().previousElementSibling?.classList.contains('inline-title'),`Tag row is not directly under the note title (prev=${row().previousElementSibling?.className||'null'}, parent=${row().parentElement?.className||'null'})`);
+        const pills=()=>[...row().querySelectorAll('.prism-tag-pill')];
+        assert(pills().length===1,`Expected 1 pill, got ${pills().length}`);
+        assert(pills()[0].textContent==='机器学习','Pill text wrong');
+        const hue=()=>pills()[0].style.getPropertyValue('--prism-tag-h');
+        const lightness=()=>pills()[0].style.getPropertyValue('--prism-tag-l');
+        assert(hue(),'Pill has no derived hue');assert(/%$/.test(lightness()),'Pill has no text lightness');
+        const baseHue=hue();
+        assert(getComputedStyle(pills()[0]).borderRadius!=='0px','Pill is not rounded');
+        await capture('22-note-tags');
+        const peerView=await open(peer);await waitFor(()=>peerView.containerEl.querySelector('.prism-tag-row'),'peer row');
+        const peerPill=()=>[...peerView.containerEl.querySelectorAll('.prism-tag-pill')].find(el=>el.textContent==='机器学习');
+        assert(peerPill(),'Peer note lost its tag');
+        assert(peerPill().style.getPropertyValue('--prism-tag-h')===baseHue,'Same tag rendered a different colour in another note');
+        assert(peerView.containerEl.querySelectorAll('.prism-tag-row .prism-tag-pill').length===2,'Peer should show two tags');
+        await prism.updateSettings({palette:'mint'});await wait(400);
+        await waitFor(()=>peerView.containerEl.querySelector('.prism-tag-row'),'peer row after palette');
+        const mintPill=[...peerView.containerEl.querySelectorAll('.prism-tag-pill')].find(el=>el.textContent==='机器学习');
+        assert(mintPill.style.getPropertyValue('--prism-tag-h')!==baseHue,'Tag colour did not follow the palette');
+        await prism.updateSettings({palette:'blue'});await wait(300);
+        // Explorer decoration and the hover card.
+        // The sidebar explorer can be stale after earlier checks detach views; mount a fresh one.
+        const explorerLeaf=this.app.workspace.getLeaf('tab');
+        await explorerLeaf.setViewState({type:'file-explorer'});await wait(700);
+        await waitFor(()=>document.querySelector('.nav-file-title[data-path="Tagged note.md"]'),'explorer row');
+        const navRow=document.querySelector('.nav-file-title[data-path="Tagged note.md"]');
+        assert(navRow.dataset.prismTags==='机器学习',`Explorer data attribute: ${navRow.dataset.prismTags}`);
+        assert(getComputedStyle(navRow,'::after').content!=='none','Explorer tag dot missing');
+        navRow.dispatchEvent(new PointerEvent('pointerover',{bubbles:true}));await wait(500);
+        const hover=document.querySelector('.prism-tag-hover');
+        assert(hover&&hover.classList.contains('is-visible'),'Tag hover card did not appear');
+        assert([...hover.querySelectorAll('.prism-tag-pill')].some(el=>el.textContent==='机器学习'),'Hover card lost the tag');
+        assert(hover.textContent.includes('Tagged note'),'Hover card lost the note name');
+        navRow.dispatchEvent(new PointerEvent('pointerover',{bubbles:true}));
+        explorerLeaf.detach();await wait(300);
+        // Live preview keeps the same row, now inside the editor sizer.
+        await this.app.workspace.setActiveLeaf(view.leaf,{focus:true});
+        await view.leaf.setViewState({type:'markdown',state:{file:first.path,mode:'source'}});await wait(1000);
+        const live=view;
+        assert(live.file?.path===first.path,'Live preview note missing');
+        await waitFor(()=>live.containerEl.querySelector('.prism-tag-row'),'live row');
+        const liveRow=live.containerEl.querySelector('.prism-tag-row');
+        assert(liveRow.closest('.cm-sizer'),'Live preview tag row is outside the editor sizer');
+        assert(liveRow.previousElementSibling?.classList.contains('inline-title'),'Live preview row is not under the title');
+        assert(live.containerEl.querySelectorAll('.prism-tag-row').length===1,'Duplicate tag rows in live preview');
+        // A block inserted above .cm-content must not disturb caret coordinates or typing.
+        live.editor.setCursor({line:2,ch:0});live.editor.replaceRange('T',{line:2,ch:0});await wait(300);
+        assert(live.editor.getLine(2).startsWith('T'),'Typing broke after the tag row was inserted');
+        assert(live.editor.getCursor().line===2,'Caret jumped after the tag row was inserted');
+        assert(live.containerEl.querySelector('.prism-tag-row')?.isConnected,'Tag row vanished while typing');
+        // Workbench dropdown narrows 最近创作动态 to one tag.
+        await prism.openStudio('home');await wait(700);
+        const todayTab=[...document.querySelectorAll('.prism-created-tabs .prism-button')].find(el=>el.textContent.trim().startsWith('今天'));
+        if(todayTab){todayTab.click();await wait(400);}
+        const filter=document.querySelector('select[data-prism-tag-filter]');assert(filter,'Tag filter dropdown missing');
+        assert([...filter.options].some(option=>option.value==='机器学习'),'Tag missing from the dropdown');
+        filter.value='实验记录';filter.dispatchEvent(new Event('change'));await wait(400);
+        const chips=[...document.querySelectorAll('.prism-note-chip')].map(el=>el.textContent);
+        assert(chips.some(text=>text.includes('Tagged peer')),'Filtered view lost the note with that tag');
+        assert(!chips.some(text=>text.includes('Tagged note')),'Filtered view kept a note without that tag');
+        filter.value='';filter.dispatchEvent(new Event('change'));await wait(300);
+        await prism.tags.remove(first.path,'机器学习',true);await wait(500);
+        assert(!view.containerEl.querySelector('.prism-tag-row'),'Tag row survived removing the last tag');
+        await waitFor(()=>!document.querySelector('.nav-file-title[data-path="Tagged note.md"]')?.dataset.prismTags,'explorer tag cleared');
+        await prism.tags.clear(peer.path);
+        await this.app.vault.delete(first,true);await this.app.vault.delete(peer,true);await wait(300);
       });
       await check('Plugin reload restores persisted tasks, and unload removes skin and floating views',async()=>{
         await this.app.plugins.disablePlugin('prism-studio');assert(!document.body.classList.contains('prism-skin'),'Skin remains after unload');assert(!document.querySelector('#prism-dynamic-skin'),'Dynamic CSS remains after unload');assert(!document.querySelector('.prism-floating'),'Floating windows remain after unload');

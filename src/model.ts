@@ -49,6 +49,39 @@ export function normalizeStarred(value:unknown):Record<string,number> {
 export function starredPaths(starred:Record<string,number>):string[] {
   return Object.keys(starred).sort((a,b)=>(starred[b]||0)-(starred[a]||0)||a.localeCompare(b));
 }
+export const TAG_MAX_LENGTH=24;
+export const TAGS_PER_NOTE=12;
+export interface TagCount {name:string;count:number;}
+/** Tags are free text, so the stored form is normalised: no leading #, single spaces, trimmed. */
+export function normalizeTagName(value:unknown):string {
+  if(typeof value!=='string')return '';
+  return stripControlChars(value.replace(/^[#\s]+/,'').replace(/\s+/g,' ')).trim().slice(0,TAG_MAX_LENGTH).trim();
+}
+export function normalizeTags(value:unknown):Record<string,string[]> {
+  const result:Record<string,string[]>={};
+  if(!value || typeof value!=='object' || Array.isArray(value))return result;
+  for(const [path,list] of Object.entries(value as Record<string,unknown>)){
+    if(typeof path!=='string' || !path)continue;
+    const tags:string[]=[];
+    for(const item of Array.isArray(list)?list:[list]){
+      const name=normalizeTagName(item);
+      if(name && !tags.includes(name))tags.push(name);
+      if(tags.length>=TAGS_PER_NOTE)break;
+    }
+    if(tags.length)result[path]=tags;
+  }
+  return result;
+}
+/** Every tag in use, most used first, then alphabetical. */
+export function tagCounts(tags:Record<string,string[]>):TagCount[] {
+  const counts=new Map<string,number>();
+  for(const list of Object.values(tags))for(const name of list)counts.set(name,(counts.get(name)||0)+1);
+  return [...counts].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name,'zh-CN'));
+}
+export function pathsWithTag(tags:Record<string,string[]>,tag:string):string[] {
+  const needle=normalizeTagName(tag);
+  return Object.keys(tags).filter(path=>tags[path].includes(needle)).sort((a,b)=>a.localeCompare(b,'zh-CN'));
+}
 export interface SkinSettings {
   enabled: boolean; palette: keyof typeof PALETTES;
   material: keyof typeof MATERIALS;
@@ -61,6 +94,7 @@ export interface SkinSettings {
   imageFit: 'natural'|'cover';
   titlebarDragHeight: number; tabGap: boolean;
   starredTint: boolean; starredMark: boolean; codeBlockScroll: boolean;
+  noteTags: boolean; tagHover: boolean;
   homeWidgets: HomeVisibility;
 }
 export interface Data {
@@ -69,6 +103,7 @@ export interface Data {
   drafts: Record<string,{content:string;original:string;updatedAt:number}>;
   fileStats: Record<string, FileStats>;
   starred: Record<string, number>;
+  tags: Record<string, string[]>;
 }
 export const DEFAULT_SETTINGS: SkinSettings = {
   enabled: true, palette: 'blue', material: 'glass', intensity: 35, opacity: 42, blur: 20,
@@ -79,6 +114,7 @@ export const DEFAULT_SETTINGS: SkinSettings = {
   nativeGlass: true, readingRail: true, imageMotion: true, imageDecks: true,
   imageFit: 'natural', titlebarDragHeight: 10, tabGap: true,
   starredTint: true, starredMark: true, codeBlockScroll: true,
+  noteTags: true, tagHover: true,
   homeWidgets: normalizeHomeWidgets(undefined)
 };
 export function localDay(value: Date | number = new Date()): string {
@@ -151,6 +187,8 @@ export function normalizeData(raw: Partial<Data> | null | undefined): Data {
   settings.starredTint=settings.starredTint!==false;
   settings.starredMark=settings.starredMark!==false;
   settings.codeBlockScroll=settings.codeBlockScroll!==false;
+  settings.noteTags=settings.noteTags!==false;
+  settings.tagHover=settings.tagHover!==false;
   const fileStats: Record<string, FileStats> = {};
   if(raw?.fileStats && typeof raw.fileStats==='object'){
     for(const [path,stats] of Object.entries(raw.fileStats)){
@@ -170,7 +208,8 @@ export function normalizeData(raw: Partial<Data> | null | undefined): Data {
     activity: raw?.activity && typeof raw.activity==='object'?raw.activity:{},
     drafts: raw?.drafts && typeof raw.drafts==='object'?raw.drafts:{},
     fileStats,
-    starred: normalizeStarred(raw?.starred)
+    starred: normalizeStarred(raw?.starred),
+    tags: normalizeTags(raw?.tags)
   };
 }
 export function isToday(task: Task, today=localDay()): boolean {

@@ -10,6 +10,7 @@ import { ReadingEnhancements } from './reading';
 import { MediaEffects } from './media';
 import { PALETTES, PALETTE_OPTIONS, MATERIAL_OPTIONS, tokenDeclarations, starTone } from './appearance';
 import { STARRED_VIEW, StarredNotes, StarredView } from './starred';
+import { NoteTags, TagModal } from './tags';
 import { CodeBlockScroller } from './code-scroll';
 import { UI_FONTS, NOTE_FONTS, UI_FONT_OPTIONS, NOTE_FONT_OPTIONS, NOTE_FONT_SIZE_MIN, NOTE_FONT_SIZE_MAX, adjustNoteFontSize, fontFaceRules, noteFontFamily, typographyRules } from './typography';
 
@@ -23,6 +24,7 @@ export default class PrismPlugin extends Plugin {
   reading!: ReadingEnhancements;
   media!: MediaEffects;
   starred!: StarredNotes;
+  tags!: NoteTags;
   private starActions=new WeakMap<ItemView,HTMLElement>();
   private codeScrollers=new Map<Document,CodeBlockScroller>();
   private subscribers=new Set<()=>void>();
@@ -45,6 +47,7 @@ export default class PrismPlugin extends Plugin {
     this.data=normalizeData(await this.loadData() as Partial<Data>|null|undefined);
     this.reading=new ReadingEnhancements(this);this.media=new MediaEffects(this);
     this.starred=new StarredNotes(this);
+    this.tags=new NoteTags(this);
     this.floats=new FloatingNotes(this);
     this.registerView(STUDIO_VIEW,leaf=>new StudioView(leaf,this));
     this.registerView(STARRED_VIEW,leaf=>new StarredView(leaf,this));
@@ -61,6 +64,10 @@ export default class PrismPlugin extends Plugin {
       if(!checking)void this.toggleStar(file);return true;
     }});
     this.addCommand({id:'clear-starred-notes',name:'清空星标笔记',callback:()=>void this.starred.clear()});
+    this.addCommand({id:'add-note-tag',name:'为当前笔记添加标签',checkCallback:checking=>{
+      const file=this.app.workspace.getActiveFile();if(!file||file.extension!=='md')return false;
+      if(!checking)new TagModal(this,file).open();return true;
+    }});
     this.addCommand({id:'new-task',name:'新建任务',callback:()=>this.newTask()});
     this.addCommand({id:'quick-capture',name:'快速收集笔记',callback:()=>new CaptureModal(this).open()});
     this.addCommand({id:'daily-note',name:'打开今天的日记',callback:()=>void this.dailyNote()});
@@ -91,7 +98,7 @@ export default class PrismPlugin extends Plugin {
     this.status.addClass('prism-status');this.registerDomEvent(this.status,'click',()=>void this.openStudio('pulse'));
     this.applySkin(document);
     this.registerEvent(this.app.workspace.on('window-open',(_win,win)=>this.applySkin(win.document)));
-    this.registerEvent(this.app.workspace.on('layout-change',()=>{this.app.workspace.iterateAllLeaves(leaf=>this.applySkin(leaf.view.containerEl.ownerDocument));this.starred.refresh();}));
+    this.registerEvent(this.app.workspace.on('layout-change',()=>{this.app.workspace.iterateAllLeaves(leaf=>this.applySkin(leaf.view.containerEl.ownerDocument));this.starred.refresh();this.tags.refresh();}));
     this.registerEvent(this.app.workspace.on('css-change',()=>this.refreshSkin()));
     this.registerEvent(this.app.workspace.on('editor-change',()=>{
       if(!this.data.settings.recordActivity)return;
@@ -105,6 +112,11 @@ export default class PrismPlugin extends Plugin {
     this.registerEvent(this.app.workspace.on('active-leaf-change',()=>{this.syncStarAction();this.syncCodeScroller();}));
     this.registerEvent(this.app.workspace.on('file-menu',(menu,file)=>{
       if(!(file instanceof TFile) || file.extension!=='md')return;
+      const current=this.tags.of(file.path);
+      menu.addItem(item=>item.setTitle('添加标签…').setIcon('tags').onClick(()=>new TagModal(this,file).open()));
+      for(const name of current)menu.addItem(item=>item.setTitle(`移除标签「${name}」`).setIcon('tag').onClick(()=>void this.tags.remove(file.path,name)));
+      if(current.length>1)menu.addItem(item=>item.setTitle('清除全部标签').setIcon('tag').onClick(()=>void this.tags.clear(file.path)));
+      menu.addSeparator();
       const starred=this.starred.is(file.path);
       menu.addItem(item=>item.setTitle(starred?'取消星标':'星标此笔记').setIcon(starred?'star-off':'star').onClick(()=>void this.toggleStar(file)));
     }));
@@ -116,9 +128,10 @@ export default class PrismPlugin extends Plugin {
       if(this.data.fileStats[oldPath]){this.data.fileStats[file.path]=this.data.fileStats[oldPath];delete this.data.fileStats[oldPath];}
       if(this.data.drafts[oldPath]){this.data.drafts[file.path]=this.data.drafts[oldPath];delete this.data.drafts[oldPath];}
       if(this.data.starred[oldPath]!==undefined){this.data.starred[file.path]=this.data.starred[oldPath];delete this.data.starred[oldPath];}
+      this.tags.migrate(oldPath,file.path);
       void this.save();this.notify();
     }));
-    this.registerEvent(this.app.vault.on('delete',file=>{this.baselines.delete(file.path);delete this.data.fileStats[file.path];delete this.data.starred[file.path];this.starred.refresh();this.notify();}));
+    this.registerEvent(this.app.vault.on('delete',file=>{this.baselines.delete(file.path);delete this.data.fileStats[file.path];delete this.data.starred[file.path];this.tags.forget(file.path);this.starred.refresh();this.tags.refresh();this.notify();}));
     this.registerInterval(window.setInterval(()=>this.tick(),15000));
     this.app.workspace.onLayoutReady(()=>{
       void this.initializeBaselines();
@@ -128,7 +141,7 @@ export default class PrismPlugin extends Plugin {
   onunload(): void {
     this.active=false;
     this.floats.closeAll(true);
-    this.reading.destroy();this.media.destroy();this.starred.destroy();this.glass.destroy();this.windowPin.destroy();this.titlebarDrag.destroy();
+    this.reading.destroy();this.media.destroy();this.starred.destroy();this.tags.destroy();this.glass.destroy();this.windowPin.destroy();this.titlebarDrag.destroy();
     for(const scroller of this.codeScrollers.values())scroller.destroy();
     this.codeScrollers.clear();
     for(const doc of this.documents){doc.body.classList.remove('prism-skin','prism-note-wheel-zoom','prism-media-decks');delete doc.body.dataset.prismMaterial;delete doc.body.dataset.prismPalette;doc.getElementById('prism-dynamic-skin')?.remove();doc.getElementById('prism-font-faces')?.remove();}
@@ -189,7 +202,7 @@ export default class PrismPlugin extends Plugin {
   }
   updateStatus(): void {this.status.setText(this.focusStarted?`Prism Studio · 专注 ${Math.floor(this.focusSeconds/60)} 分钟`:'Prism Studio');}
   subscribe(callback:()=>void):()=>void {this.subscribers.add(callback);return ()=>this.subscribers.delete(callback);}
-  notify(): void {for(const callback of this.subscribers)callback();this.syncStarActions();}
+  notify(): void {for(const callback of this.subscribers)callback();this.syncStarActions();this.tags?.renderNotes();}
   async save(): Promise<void> {
     const snapshot=JSON.parse(JSON.stringify(this.data)) as Data;
     const job=this.writeQueue.catch(()=>undefined).then(()=>this.saveData(snapshot));this.writeQueue=job;
@@ -225,10 +238,11 @@ export default class PrismPlugin extends Plugin {
     doc.body.classList.toggle('prism-tab-gap',s.tabGap);
     doc.body.classList.toggle('prism-star-tint',s.starredTint);
     doc.body.classList.toggle('prism-star-mark',s.starredMark);
+    doc.body.classList.toggle('prism-tag-mark',s.noteTags);
     this.titlebarDrag.attach(doc,s.titlebarDragHeight);
     doc.body.dataset.prismMaterial=s.material;doc.body.dataset.prismPalette=s.palette;
     this.glass.apply(doc,s.enabled && s.nativeGlass && s.material!=='solid',s.material);
-    this.reading.attach(doc);this.media.attach(doc);this.starred.attach(doc);
+    this.reading.attach(doc);this.media.attach(doc);this.starred.attach(doc);this.tags.attach(doc);
     // A detached overlay per document: it becomes a scrollbar for the code block under the caret.
     if(!this.codeScrollers.has(doc))this.codeScrollers.set(doc,new CodeBlockScroller(this,doc));
     // Kept on createElement: createEl('style') is rejected by the no-forbidden-elements review rule.
@@ -249,7 +263,7 @@ export default class PrismPlugin extends Plugin {
     body.prism-note-wheel-zoom .workspace-leaf-content[data-type="markdown"] {--prism-note-size:${s.fontSize}px;--font-text-size:var(--prism-note-size);}${typographyRules(s)}`;
     if(style.textContent!==rules)style.textContent=rules;
   }
-  refreshSkin(): void {for(const doc of this.documents){if(!doc.defaultView || doc.defaultView.closed){this.documents.delete(doc);continue;}this.applySkin(doc);}}
+  refreshSkin(): void {for(const doc of this.documents){if(!doc.defaultView || doc.defaultView.closed){this.documents.delete(doc);continue;}this.applySkin(doc);}this.tags.repaint();}
   /** Re-evaluate which code block (if any) owns the caret in every open document. */
   syncCodeScroller(): void {
     for(const [doc,scroller] of this.codeScrollers){
@@ -495,6 +509,10 @@ class PrismSettings extends PluginSettingTab {
     new Setting(el).setName('文件名着色').setDesc('星标笔记在文件列表、星标页与工作台中使用当前配色的强调色显示；切换配色或明暗时自动跟随。').addToggle(c=>c.setValue(s.starredTint).onChange(v=>void this.plugin.updateSettings({starredTint:v})));
     new Setting(el).setName('星标标记').setDesc('在星标笔记名称前显示一个小星形，与名称同色。').addToggle(c=>c.setValue(s.starredMark).onChange(v=>void this.plugin.updateSettings({starredMark:v})));
     new Setting(el).setName('星标管理').setDesc(`当前 ${this.plugin.starred.count()} 篇。星标只保存在本插件数据中，不改写笔记内容；移动或重命名会自动跟随。`).addButton(c=>c.setButtonText('打开星标笔记').onClick(()=>void this.plugin.openStarred())).addButton(c=>c.setButtonText('清空星标').onClick(async()=>{await this.plugin.starred.clear();this.display();}));
+    new Setting(el).setName('笔记标签').setHeading();
+    new Setting(el).setName('标题下标签').setDesc('在笔记大标题下方显示彩色标签胶囊，颜色由标签内容决定，同一标签在任何笔记中颜色一致，并随当前配色微调。').addToggle(c=>c.setValue(s.noteTags).onChange(v=>void this.plugin.updateSettings({noteTags:v})));
+    new Setting(el).setName('列表悬浮预览').setDesc('鼠标停在文件列表的笔记上时，浮出它全部标签；名称后的小色点最多混合三个标签的颜色。').addToggle(c=>c.setValue(s.tagHover).onChange(v=>void this.plugin.updateSettings({tagHover:v})));
+    new Setting(el).setName('标签管理').setDesc(`当前 ${this.plugin.tags.count()} 个标签，覆盖 ${this.plugin.tags.notes()} 篇笔记。右键文件可添加或移除标签。`).addButton(c=>c.setButtonText('清空全部标签').onClick(async()=>{await this.plugin.tags.clearAll();this.display();}));
     new Setting(el).setName('快捷入口').setHeading();
     new Setting(el).setName('任务与项目').addButton(c=>c.setButtonText('打开任务').onClick(()=>void this.plugin.openStudio('tasks'))).addButton(c=>c.setButtonText('管理项目').onClick(()=>this.plugin.manage('projects')));
     new Setting(el).setName('Markdown 任务').addButton(c=>c.setButtonText('导出任务').onClick(()=>void this.plugin.exportTasks()));

@@ -543,3 +543,64 @@ body.prism-star-mark .prism-starred.prism-note-chip::before { margin-right: 0; }
 /* While the caret is inside a long code block its own bar is the active control;
    the note-wide rail steps back so the two never compete for the same edge. */
 body.prism-code-scrolling .prism-reading-rail:not(:hover):not(.is-dragging) { opacity: .25; transition: opacity .2s ease; }
+
+/* Note tags. The hue and text lightness come from the tag text (set inline per pill), so a
+   tag keeps one colour everywhere; the wash is translucent enough to inherit the glass. */
+.prism-tag-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 14px; line-height: 1.4; }
+.prism-tag-row.is-top { margin-top: 8px; }
+.prism-tag-pill {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 10px;
+  border-radius: 999px; border: 1px solid hsl(var(--prism-tag-h, 210) var(--prism-tag-s, 66%) var(--prism-tag-l, 44%) / .34);
+  background: hsl(var(--prism-tag-h, 210) var(--prism-tag-s, 66%) 55% / .16);
+  color: hsl(var(--prism-tag-h, 210) var(--prism-tag-s, 66%) var(--prism-tag-l, 44%));
+  font-family: inherit; font-size: var(--font-ui-smaller, 12px); font-weight: 600; letter-spacing: .01em; line-height: 1;
+  height: auto; min-height: 22px; padding-block: 5px;
+  box-shadow: none; cursor: pointer; transition: background .16s ease, border-color .16s ease, transform .16s ease;
+}
+.prism-tag-pill:hover { background: hsl(var(--prism-tag-h, 210) var(--prism-tag-s, 66%) 55% / .26); border-color: hsl(var(--prism-tag-h, 210) var(--prism-tag-s, 66%) var(--prism-tag-l, 44%) / .46); }
+.prism-tag-pill:active { transform: scale(.97); }
+.prism-tag-pill.is-compact { min-height: 20px; padding: 3px 8px; font-size: 11px; }
+.prism-tag-pill .prism-tag-count { font-weight: 500; opacity: .6; }
+.prism-tag-pill .prism-tag-remove { display: inline-flex; width: 12px; height: 12px; margin-left: 2px; opacity: .65; }
+.prism-tag-pill .prism-tag-remove svg { width: 12px; height: 12px; }
+.prism-tag-row .prism-tag-add {
+  display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0;
+  border-radius: 999px; border: 1px dashed var(--background-modifier-border);
+  background: transparent; color: var(--text-faint); box-shadow: none; opacity: .35;
+  transition: opacity .16s ease, color .16s ease;
+}
+.prism-tag-row:hover .prism-tag-add, .prism-tag-add:focus-visible { opacity: .85; }
+.prism-tag-row .prism-tag-add:hover { color: var(--text-muted); opacity: 1; }
+.prism-tag-row .prism-tag-add svg { width: 12px; height: 12px; }
+
+/* Explorer rows carry the tag colours in three custom properties; the dot blends them. */
+body.prism-tag-mark .nav-file-title[data-prism-tags]::after {
+  content: ""; flex: 0 0 auto; width: 6px; height: 6px; margin-left: 5px; border-radius: 999px; opacity: .78;
+  background-image: linear-gradient(135deg, rgb(var(--prism-tag-1, 130 130 130)) 0 33%, rgb(var(--prism-tag-2, var(--prism-tag-1, 130 130 130))) 33% 66%, rgb(var(--prism-tag-3, var(--prism-tag-1, 130 130 130))) 66% 100%);
+}
+.prism-tag-hover {
+  position: fixed; z-index: 210; display: flex; flex-direction: column; gap: 5px; max-width: 260px;
+  padding: 8px 10px; border-radius: 10px; background: var(--background-secondary, #fff);
+  border: 1px solid var(--background-modifier-border); box-shadow: 0 8px 24px rgb(0 0 0 / .18);
+  opacity: 0; transform: translateY(3px); transition: opacity .12s ease, transform .12s ease; pointer-events: none;
+}
+.prism-tag-hover.is-visible { opacity: 1; transform: none; }
+.prism-tag-hover-head { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-ui-smaller); font-weight: 600; color: var(--text-muted); }
+.prism-tag-hover-list { display: flex; flex-wrap: wrap; gap: 5px; }
+
+/* Workbench filter */
+.prism-tag-select {
+  height: 28px; max-width: 180px; padding: 0 24px 0 10px; border-radius: 8px;
+  border: 1px solid var(--background-modifier-border); background: var(--background-primary);
+  color: var(--text-normal); font-size: var(--font-ui-smaller);
+}
+.prism-tag-select:disabled { opacity: .55; }
+
+/* Tag modal */
+.prism-tag-modal-note { margin: -6px 0 12px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.prism-tag-modal-current { display: flex; flex-wrap: wrap; gap: 6px; min-height: 24px; margin-bottom: 12px; }
+.prism-tag-input-row { display: flex; align-items: center; gap: 8px; }
+.prism-tag-input { flex: 1; height: 34px; }
+.prism-tag-suggestions-label { margin: 14px 0 6px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.prism-tag-suggestions { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow: auto; }
+.prism-tag-empty { color: var(--text-faint); font-size: var(--font-ui-smaller); }

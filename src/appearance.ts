@@ -96,3 +96,47 @@ export function starTone(palette:keyof typeof PALETTES,dark=false):string {
   return `${sr} ${sg} ${sb}`;
 }
 
+
+const srgbChannel=(value:number)=>{const unit=value/255;return unit<=.03928?unit/12.92:Math.pow((unit+.055)/1.055,2.4);};
+const relativeLuminance=(rgb:number[])=>.2126*srgbChannel(rgb[0])+.7152*srgbChannel(rgb[1])+.0722*srgbChannel(rgb[2]);
+const contrastRatio=(a:number[],b:number[])=>{const first=relativeLuminance(a),second=relativeLuminance(b);return (Math.max(first,second)+.05)/(Math.min(first,second)+.05);};
+const blended=(foreground:number[],surface:number[],alpha:number)=>foreground.map((value,index)=>Math.round(value*alpha+surface[index]*(1-alpha)));
+/**
+ * Stable hue for a tag name: the text is hashed, then stepped by the golden angle so
+ * neighbouring names land far apart. The same text always yields the same colour.
+ */
+export function tagHue(name:string):number {
+  let hash=2166136261;
+  for(const character of name.trim().toLowerCase()){hash^=character.codePointAt(0)??0;hash=Math.imul(hash,16777619);}
+  return Math.round((((hash>>>0)*137.508)%360)*10)/10;
+}
+export interface TagTone {hue:number;saturation:number;textLightness:number;}
+/**
+ * Tag pills take their hue from the name and lean slightly toward the palette accent, so the
+ * set reads as part of the theme. Text lightness is solved against the tinted surface rather
+ * than hard-coded: yellows and greens need to sit darker than blues to stay readable.
+ */
+export function tagTone(name:string,palette:keyof typeof PALETTES,dark=false):TagTone {
+  const surface=(dark?PALETTES[palette].darkSurface:PALETTES[palette].surface).split(/\s+/).map(Number);
+  const accent=(dark?PALETTES[palette].darkAccent:PALETTES[palette].accent).split(/\s+/).map(Number);
+  const [accentHue]=toHsl(accent[0]||0,accent[1]||0,accent[2]||0);
+  const hue=Math.round(((((tagHue(name)*.8+accentHue*.2)%360)+360)%360)*10)/10;
+  const saturation=dark?70:66;
+  // The pill body is a 12% (18% on dark) wash of a mid-light tint over the note surface.
+  const wash=blended(fromHsl(hue,saturation/100,.55),surface,dark?.22:.16);
+  let lightness=dark?.8:.44;
+  for(let step=0;step<40;step++){
+    if(contrastRatio(fromHsl(hue,saturation/100,lightness),wash)>=4.8)break;
+    const next=lightness+(dark?.01:-.01);
+    if(dark?next>.95:next<.2)break;
+    lightness=next;
+  }
+  return {hue,saturation,textLightness:Math.round(lightness*100)/100};
+}
+/** Already-composited colours, for tests and for the explorer dot. */
+export function tagPillColors(name:string,palette:keyof typeof PALETTES,dark=false):{text:number[];background:number[];border:number[]} {
+  const tone=tagTone(name,palette,dark);
+  const surface=(dark?PALETTES[palette].darkSurface:PALETTES[palette].surface).split(/\s+/).map(Number);
+  const text=fromHsl(tone.hue,tone.saturation/100,tone.textLightness);
+  return {text,background:blended(fromHsl(tone.hue,tone.saturation/100,.55),surface,dark?.22:.16),border:blended(text,surface,dark?.38:.34)};
+}
