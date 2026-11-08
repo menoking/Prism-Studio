@@ -350,6 +350,45 @@ module.exports=class PrismNativeHarness extends Plugin{
         if(nav && nav.view.getViewType()==='prism-starred-view')await nav.setViewState({type:'file-explorer'});
         await prism.openStudio('home');
       });
+      await check('Explorer hover: tag card replaces the app file tooltip',async()=>{
+        const poll=async(fn,label,limit=6000)=>{const stop=Date.now()+limit;while(Date.now()<stop){const value=fn();if(value)return value;await wait(80);}throw new Error(`Timed out: ${label}`);};
+        const make=async name=>{const existing=this.app.vault.getAbstractFileByPath(name);if(existing)await this.app.vault.delete(existing,true);return this.app.vault.create(name,'# Probe\n\nBody\n');};
+        const tagged=await make('Hover tagged.md'),plain=await make('Hover plain.md');
+        await prism.tags.add(tagged.path,'机制',true);
+        // A background tab renders with zero size, so the real pointer could never reach a row.
+        const leaf=this.app.workspace.getLeftLeaf(false);await leaf.setViewState({type:'file-explorer'});this.app.workspace.revealLeaf(leaf);await wait(900);
+        const rowOf=async name=>poll(()=>leaf.view.containerEl.querySelector(`.nav-file-title[data-path="${name}"]`),`row ${name}`);
+        const taggedRow=await rowOf(tagged.path),plainRow=await rowOf(plain.path);
+        // Real input, not a synthetic event: the app builds this tooltip from its own hover path.
+        const content=remote.getCurrentWindow().webContents;
+        const move=async el=>{const rect=el.getBoundingClientRect();content.sendInputEvent({type:'mouseMove',x:Math.round(rect.left+rect.width/2),y:Math.round(rect.top+rect.height/2)});await wait(120);};
+        const away=async()=>{content.sendInputEvent({type:'mouseMove',x:Math.round(window.innerWidth-6),y:Math.round(window.innerHeight-6)});await wait(500);};
+        const appTip=()=>[...document.querySelectorAll('.tooltip')].find(el=>String(el.textContent).includes('最后修改于'))||null;
+        const visible=el=>!!el&&getComputedStyle(el).display!=='none'&&el.getBoundingClientRect().width>0;
+        // The first hover of the session can be swallowed while the window settles; it is a warm-up.
+        await move(plainRow);await wait(700);await away();
+        await move(taggedRow);
+        const card=await poll(()=>document.querySelector('.prism-tag-hover.is-visible'),'tag card');
+        const suppressed=await poll(()=>appTip(),'app tooltip element on a tagged row',4000);
+        await wait(500);
+        assert(!visible(appTip()),'App tooltip painted over the tag card');
+        assert(document.body.classList.contains('prism-tag-hovering'),'Hover suppression class missing');
+        assert(card.textContent.includes('机制'),'Card lost the tag');
+        assert(/修改 \d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(card.textContent),`Card lost the modified time: ${card.textContent}`);
+        assert(/创建 \d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(card.textContent),`Card lost the created time: ${card.textContent}`);
+        await capture('24-tag-hover');
+        await away();
+        assert(!document.body.classList.contains('prism-tag-hovering'),'Hover suppression class stuck after leaving');
+        assert(!document.querySelector('.prism-tag-hover.is-visible'),'Card stayed visible after leaving');
+        // Same row without tags: the app's own tooltip must still work.
+        await move(plainRow);
+        const back=await poll(()=>{const el=appTip();return visible(el)?el:null;},'app tooltip on an untagged row',5000);
+        assert(back,'App tooltip did not come back on an untagged row');
+        report.hoverProbe={suppressedText:String(suppressed?.textContent||'').slice(0,40),plainText:String(back.textContent).slice(0,40)};
+        await away();
+        await this.app.vault.delete(tagged,true);await this.app.vault.delete(plain,true);
+        await wait(300);
+      });
       await check('Note tags: pill row under the title, explorer hover, palette tint and studio filter',async()=>{
         for(const name of ['Tagged note.md','Tagged peer.md']){
           const existing=this.app.vault.getAbstractFileByPath(name);if(existing)await this.app.vault.delete(existing,true);

@@ -579,12 +579,22 @@ body.prism-tag-mark .nav-file-title[data-prism-tags]::after {
   background-image: linear-gradient(135deg, rgb(var(--prism-tag-1, 130 130 130)) 0 33%, rgb(var(--prism-tag-2, var(--prism-tag-1, 130 130 130))) 33% 66%, rgb(var(--prism-tag-3, var(--prism-tag-1, 130 130 130))) 66% 100%);
 }
 .prism-tag-hover {
-  position: fixed; z-index: 210; display: flex; flex-direction: column; gap: 5px; max-width: 260px;
-  padding: 8px 10px; border-radius: 10px; background: var(--background-secondary, #fff);
+  position: fixed; z-index: 1200; display: flex; flex-direction: column; gap: 5px; max-width: 260px;
+  padding: 8px 10px; border-radius: 10px;
+  background: rgb(var(--prism-surface-rgb, 255 255 255) / .96);
+  backdrop-filter: blur(14px);
   border: 1px solid var(--background-modifier-border); box-shadow: 0 8px 24px rgb(0 0 0 / .18);
   opacity: 0; transform: translateY(3px); transition: opacity .12s ease, transform .12s ease; pointer-events: none;
 }
 .prism-tag-hover.is-visible { opacity: 1; transform: none; }
+.prism-tag-hover-meta { display: flex; flex-direction: column; gap: 1px; color: var(--text-faint); font-size: 10.5px; line-height: 1.35; white-space: nowrap; }
+
+/* Obsidian renders its own file tooltip (modified / created) in the same corner as the tag
+   card, with no attribute to key off and no way to stop it at the event level. So it is
+   hidden while a tagged row is hovered and those timestamps move into the card. The :has()
+   half covers the moment before the card appears; the body class covers it afterwards. */
+body.prism-tag-hover-on:has(.nav-file-title[data-prism-tags]:hover) .tooltip,
+body.prism-tag-hovering .tooltip { display: none !important; }
 .prism-tag-hover-head { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--font-ui-smaller); font-weight: 600; color: var(--text-muted); }
 .prism-tag-hover-list { display: flex; flex-wrap: wrap; gap: 5px; }
 

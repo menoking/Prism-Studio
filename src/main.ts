@@ -239,6 +239,7 @@ export default class PrismPlugin extends Plugin {
     doc.body.classList.toggle('prism-star-tint',s.starredTint);
     doc.body.classList.toggle('prism-star-mark',s.starredMark);
     doc.body.classList.toggle('prism-tag-mark',s.noteTags);
+    doc.body.classList.toggle('prism-tag-hover-on',s.noteTags&&s.tagHover);
     this.titlebarDrag.attach(doc,s.titlebarDragHeight);
     doc.body.dataset.prismMaterial=s.material;doc.body.dataset.prismPalette=s.palette;
     this.glass.apply(doc,s.enabled && s.nativeGlass && s.material!=='solid',s.material);

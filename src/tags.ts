@@ -1,4 +1,4 @@
-import { FuzzySuggestModal, MarkdownView, Menu, Modal, Notice, TFile, setIcon } from 'obsidian';
+import { FuzzySuggestModal, MarkdownView, Menu, Modal, Notice, TFile, moment, setIcon } from 'obsidian';
 import type PrismPlugin from './main';
 import { TAG_MAX_LENGTH, TAGS_PER_NOTE, normalizeTagName, normalizeTags, pathsWithTag, tagCounts, type TagCount } from './model';
 import { tagPillColors, tagTone } from './appearance';
@@ -312,6 +312,9 @@ export class NoteTags{
       if(!row||!this.plugin.data.settings.tagHover)return;
       const names=this.of(row.getAttribute('data-path')||'');
       if(!names.length)return;
+      // Suppress the app's own file tooltip right away: it sits in the same corner as the card,
+      // so the two would overlap for the whole hover. Its timestamps move into the card below.
+      doc.body.classList.add('prism-tag-hovering');
       const state=this.docs.get(doc);if(!state||!doc.defaultView)return;
       doc.defaultView.clearTimeout(state.hoverTimer);
       state.hoverTimer=doc.defaultView.setTimeout(()=>{
@@ -332,7 +335,18 @@ export class NoteTags{
     const head=doc.createElement('div');head.className='prism-tag-hover-head';head.textContent=basename(path);
     const list=doc.createElement('div');list.className='prism-tag-hover-list';
     for(const name of names){const pill=this.pill(doc,name);pill.classList.add('is-compact');pill.tabIndex=-1;list.append(pill);}
-    card.append(head,list);
+    card.append(head);
+    // The app's own file tooltip shows these two timestamps. It is suppressed while a tagged
+    // row is hovered, so the card carries the same facts instead of dropping them.
+    const file=this.plugin.app.vault.getAbstractFileByPath(path);
+    if(file instanceof TFile){
+      const meta=doc.createElement('div');meta.className='prism-tag-hover-meta';
+      for(const line of [`修改 ${moment(file.stat.mtime).format('YYYY-MM-DD HH:mm')}`,`创建 ${moment(file.stat.ctime).format('YYYY-MM-DD HH:mm')}`]){
+        const item=doc.createElement('div');item.textContent=line;meta.append(item);
+      }
+      card.append(meta);
+    }
+    card.append(list);
     // Measure off-screen first so the card can flip to the left of a narrow sidebar.
     card.style.visibility='hidden';card.classList.add('is-visible');
     const rect=row.getBoundingClientRect(),size=card.getBoundingClientRect();
@@ -342,6 +356,7 @@ export class NoteTags{
   }
   private hideHover():void{
     this.hoverRow=null;
+    for(const doc of this.docs.keys())doc.body.classList.remove('prism-tag-hovering');
     if(!this.hover)return;
     this.hover.classList.remove('is-visible');
     this.hover.replaceChildren();
