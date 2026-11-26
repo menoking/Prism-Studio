@@ -560,6 +560,16 @@ body.prism-code-scrolling .prism-reading-rail:not(:hover):not(.is-dragging) { op
 .prism-tag-pill:hover { background: hsl(var(--prism-tag-h, 210) var(--prism-tag-s, 66%) 55% / .26); border-color: hsl(var(--prism-tag-h, 210) var(--prism-tag-s, 66%) var(--prism-tag-l, 44%) / .46); }
 .prism-tag-pill:active { transform: scale(.97); }
 .prism-tag-pill.is-compact { min-height: 20px; padding: 3px 8px; font-size: 11px; }
+/* Dragging picks up the pill in place instead of cloning it: the same node moves, so the
+   row order on screen is already the order that gets stored on drop. */
+.prism-tag-row .prism-tag-pill[data-tag],
+.prism-tag-modal-current .prism-tag-pill[data-tag] { cursor: grab; }
+.prism-tag-pill.is-dragging {
+  cursor: grabbing; opacity: .55; transform: scale(.98);
+  box-shadow: 0 6px 16px rgb(0 0 0 / .22); z-index: 2; position: relative;
+}
+.prism-tag-row.is-sorting, .prism-tag-modal-current.is-sorting { user-select: none; }
+.prism-tag-row.is-sorting .prism-tag-add { opacity: 0; pointer-events: none; }
 .prism-tag-pill .prism-tag-count { font-weight: 500; opacity: .6; }
 .prism-tag-pill .prism-tag-remove { display: inline-flex; width: 12px; height: 12px; margin-left: 2px; opacity: .65; }
 .prism-tag-pill .prism-tag-remove svg { width: 12px; height: 12px; }

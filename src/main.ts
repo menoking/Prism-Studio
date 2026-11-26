@@ -10,7 +10,7 @@ import { ReadingEnhancements } from './reading';
 import { MediaEffects } from './media';
 import { PALETTES, PALETTE_OPTIONS, MATERIAL_OPTIONS, tokenDeclarations, starTone } from './appearance';
 import { STARRED_VIEW, StarredNotes, StarredView } from './starred';
-import { NoteTags, TagModal } from './tags';
+import { NoteTags, TagEditPicker, TagModal } from './tags';
 import { CodeBlockScroller } from './code-scroll';
 import { UI_FONTS, NOTE_FONTS, UI_FONT_OPTIONS, NOTE_FONT_OPTIONS, NOTE_FONT_SIZE_MIN, NOTE_FONT_SIZE_MAX, adjustNoteFontSize, fontFaceRules, noteFontFamily, typographyRules } from './typography';
 
@@ -68,6 +68,7 @@ export default class PrismPlugin extends Plugin {
       const file=this.app.workspace.getActiveFile();if(!file||file.extension!=='md')return false;
       if(!checking)new TagModal(this,file).open();return true;
     }});
+    this.addCommand({id:'edit-note-tag',name:'编辑已有标签',callback:()=>new TagEditPicker(this).open()});
     this.addCommand({id:'new-task',name:'新建任务',callback:()=>this.newTask()});
     this.addCommand({id:'quick-capture',name:'快速收集笔记',callback:()=>new CaptureModal(this).open()});
     this.addCommand({id:'daily-note',name:'打开今天的日记',callback:()=>void this.dailyNote()});
@@ -114,6 +115,7 @@ export default class PrismPlugin extends Plugin {
       if(!(file instanceof TFile) || file.extension!=='md')return;
       const current=this.tags.of(file.path);
       menu.addItem(item=>item.setTitle('添加标签…').setIcon('tags').onClick(()=>new TagModal(this,file).open()));
+      if(current.length)menu.addItem(item=>item.setTitle('编辑标签…').setIcon('pencil').onClick(()=>new TagEditPicker(this).open()));
       for(const name of current)menu.addItem(item=>item.setTitle(`移除标签「${name}」`).setIcon('tag').onClick(()=>void this.tags.remove(file.path,name)));
       if(current.length>1)menu.addItem(item=>item.setTitle('清除全部标签').setIcon('tag').onClick(()=>void this.tags.clear(file.path)));
       menu.addSeparator();
@@ -513,7 +515,7 @@ class PrismSettings extends PluginSettingTab {
     new Setting(el).setName('笔记标签').setHeading();
     new Setting(el).setName('标题下标签').setDesc('在笔记大标题下方显示彩色标签胶囊，颜色由标签内容决定，同一标签在任何笔记中颜色一致，并随当前配色微调。').addToggle(c=>c.setValue(s.noteTags).onChange(v=>void this.plugin.updateSettings({noteTags:v})));
     new Setting(el).setName('列表悬浮预览').setDesc('鼠标停在文件列表的笔记上时，浮出它全部标签；名称后的小色点最多混合三个标签的颜色。').addToggle(c=>c.setValue(s.tagHover).onChange(v=>void this.plugin.updateSettings({tagHover:v})));
-    new Setting(el).setName('标签管理').setDesc(`当前 ${this.plugin.tags.count()} 个标签，覆盖 ${this.plugin.tags.notes()} 篇笔记。右键文件可添加或移除标签。`).addButton(c=>c.setButtonText('清空全部标签').onClick(async()=>{await this.plugin.tags.clearAll();this.display();}));
+    new Setting(el).setName('标签管理').setDesc(`当前 ${this.plugin.tags.count()} 个标签，覆盖 ${this.plugin.tags.notes()} 篇笔记。点标题下的标签可改名，拖动标签可调整顺序；右键文件可添加或移除标签。`).addButton(c=>c.setButtonText('编辑标签').onClick(()=>new TagEditPicker(this.plugin).open())).addButton(c=>c.setButtonText('清空全部标签').onClick(async()=>{await this.plugin.tags.clearAll();this.display();}));
     new Setting(el).setName('快捷入口').setHeading();
     new Setting(el).setName('任务与项目').addButton(c=>c.setButtonText('打开任务').onClick(()=>void this.plugin.openStudio('tasks'))).addButton(c=>c.setButtonText('管理项目').onClick(()=>this.plugin.manage('projects')));
     new Setting(el).setName('Markdown 任务').addButton(c=>c.setButtonText('导出任务').onClick(()=>void this.plugin.exportTasks()));

@@ -72,6 +72,34 @@ export function normalizeTags(value:unknown):Record<string,string[]> {
   }
   return result;
 }
+/**
+ * Renames one tag across every note. A note that already carries the target name collapses
+ * to a single pill in the position where the old tag stood, so the list never duplicates.
+ */
+export function renameTagIn(tags:Record<string,string[]>,from:string,to:string):{tags:Record<string,string[]>;notes:number}{
+  const source=normalizeTagName(from),target=normalizeTagName(to);
+  const result:Record<string,string[]>={};let notes=0;
+  if(!source||!target||source===target)return {tags,notes};
+  for(const [path,list] of Object.entries(tags)){
+    if(!list.includes(source)){result[path]=list;continue;}
+    notes++;
+    const merged:string[]=[];
+    for(const name of list){
+      const value=name===source?target:name;
+      if(!merged.includes(value))merged.push(value);
+    }
+    result[path]=merged;
+  }
+  return {tags:normalizeTags(result),notes};
+}
+/** Drag order is accepted only when it is a permutation; an unchanged order keeps the same array. */
+export function orderTags(list:string[],order:string[]):string[]{
+  const wanted=order.map(normalizeTagName).filter(Boolean);
+  if(wanted.length!==list.length)return list;
+  if(new Set(wanted).size!==wanted.length)return list;
+  if(!wanted.every(name=>list.includes(name)))return list;
+  return wanted.every((name,index)=>name===list[index])?list:wanted;
+}
 /** Every tag in use, most used first, then alphabetical. */
 export function tagCounts(tags:Record<string,string[]>):TagCount[] {
   const counts=new Map<string,number>();

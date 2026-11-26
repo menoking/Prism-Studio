@@ -389,7 +389,7 @@ module.exports=class PrismNativeHarness extends Plugin{
         await this.app.vault.delete(tagged,true);await this.app.vault.delete(plain,true);
         await wait(300);
       });
-      await check('Note tags: pill row under the title, explorer hover, palette tint and studio filter',async()=>{
+      await check('Note tags: pill row under the title, rename everywhere, drag reorder, explorer hover, palette tint and studio filter',async()=>{
         for(const name of ['Tagged note.md','Tagged peer.md']){
           const existing=this.app.vault.getAbstractFileByPath(name);if(existing)await this.app.vault.delete(existing,true);
         }
@@ -414,7 +414,8 @@ module.exports=class PrismNativeHarness extends Plugin{
         await prism.tags.add(peer.path,'实验记录',true);
         await waitFor(()=>view.containerEl.querySelector('.prism-tag-row'),'first row');
         const row=()=>view.containerEl.querySelector('.prism-tag-row');
-        assert(row().previousElementSibling?.classList.contains('inline-title'),`Tag row is not directly under the note title (prev=${row().previousElementSibling?.className||'null'}, parent=${row().parentElement?.className||'null'})`);
+        const rowProbe=()=>{const el=row();const parent=el.parentElement;const rect=el.getBoundingClientRect();const pv=view.containerEl.querySelector('.markdown-preview-view');return `prev=${el.previousElementSibling?.className||'null'}, parent=${parent?.className||'null'}, kids=${[...(parent?.children||[])].slice(0,6).map(k=>k.className||k.tagName).join(' / ')}, rect=${Math.round(rect.width)}x${Math.round(rect.height)}, mode=${view.getMode()}, connected=${view.containerEl.isConnected}, previewDisplay=${pv?getComputedStyle(pv).display:'none'}, previewChildren=${view.containerEl.querySelector('.markdown-preview-sizer')?.childElementCount}`;};
+        assert(row().previousElementSibling?.classList.contains('inline-title'),`Tag row is not directly under the note title (${rowProbe()})`);
         const pills=()=>[...row().querySelectorAll('.prism-tag-pill')];
         assert(pills().length===1,`Expected 1 pill, got ${pills().length}`);
         assert(pills()[0].textContent==='机器学习','Pill text wrong');
@@ -464,18 +465,62 @@ module.exports=class PrismNativeHarness extends Plugin{
         assert(live.editor.getLine(2).startsWith('T'),'Typing broke after the tag row was inserted');
         assert(live.editor.getCursor().line===2,'Caret jumped after the tag row was inserted');
         assert(live.containerEl.querySelector('.prism-tag-row')?.isConnected,'Tag row vanished while typing');
+        // Editing an existing tag: click the pill inside the modal, retype, Enter. Both notes follow.
+        live.containerEl.querySelector('.prism-tag-add').click();
+        await waitFor(()=>document.querySelector('.prism-tag-modal .prism-tag-modal-current .prism-tag-pill'),'modal pill');
+        document.querySelector('.prism-tag-modal .prism-tag-modal-current .prism-tag-pill').click();
+        await waitFor(()=>document.querySelectorAll('.prism-tag-modal').length>=2,'rename modal');
+        const tagModals=[...document.querySelectorAll('.prism-tag-modal')];
+        const renameModal=tagModals[tagModals.length-1];
+        const renameInput=renameModal.querySelector('.prism-tag-input');
+        assert(renameInput,'Rename modal has no input');
+        assert(renameInput.value==='机器学习',`Rename modal did not preselect the tag (${renameInput.value})`);
+        renameInput.value='机器学习进阶';
+        renameInput.dispatchEvent(new Event('input',{bubbles:true}));
+        renameInput.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+        await wait(700);
+        assert(prism.tags.of(first.path).includes('机器学习进阶'),'Rename did not reach the open note');
+        assert(!prism.tags.of(first.path).includes('机器学习'),'Old tag name survived on the open note');
+        assert(prism.tags.of(peer.path).includes('机器学习进阶'),'Rename did not reach the peer note');
+        assert(!prism.tags.of(peer.path).includes('机器学习'),'Old tag name survived on the peer');
+        closeModals();await wait(400);
+        // Dragging a pill onto the first slot reorders it, and the order is persisted.
+        await prism.tags.add(first.path,'实验记录',true);
+        await prism.tags.add(first.path,'待复核',true);
+        await waitFor(()=>live.containerEl.querySelectorAll('.prism-tag-row .prism-tag-pill[data-tag]').length===3,'three pills');
+        const rowPills=()=>[...live.containerEl.querySelectorAll('.prism-tag-row .prism-tag-pill[data-tag]')];
+        assert(rowPills().map(el=>el.dataset.tag).join('|')==='机器学习进阶|实验记录|待复核','Unexpected starting order');
+        const fire=(el,type,x,y)=>el.dispatchEvent(new PointerEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:7,button:0,isPrimary:true}));
+        const moved=rowPills()[2],home=rowPills()[0].getBoundingClientRect();
+        const start=moved.getBoundingClientRect();
+        const midY=home.top+home.height/2;
+        fire(moved,'pointerdown',start.left+start.width/2,start.top+start.height/2);
+        fire(moved,'pointermove',home.left-6,midY);await wait(120);
+        assert(rowPills()[0]===moved,'Drag did not move the pill to the front');
+        fire(moved,'pointerup',home.left-6,midY);await wait(600);
+        assert(prism.tags.of(first.path).join('|')==='待复核|机器学习进阶|实验记录',`Drag order not stored: ${prism.tags.of(first.path).join('|')}`);
+        assert(rowPills().map(el=>el.dataset.tag).join('|')==='待复核|机器学习进阶|实验记录','Row did not re-render in the stored order');
+        assert(live.containerEl.querySelectorAll('.prism-tag-row').length===1,'Drag left a duplicate row');
+        // The same reorder from the keyboard keeps the pills usable without a mouse.
+        rowPills()[0].dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',altKey:true,bubbles:true,cancelable:true}));
+        await wait(400);
+        assert(prism.tags.of(first.path).join('|')==='机器学习进阶|待复核|实验记录',`Keyboard reorder not stored: ${prism.tags.of(first.path).join('|')}`);
+        assert(rowPills().map(el=>el.dataset.tag).join('|')==='机器学习进阶|待复核|实验记录','Row did not follow the keyboard reorder');
+        await capture('22b-note-tags-edit-sort');
+        await prism.tags.remove(first.path,'待复核',true);
+        await prism.tags.remove(first.path,'实验记录',true);await wait(400);
         // Workbench dropdown narrows 最近创作动态 to one tag.
         await prism.openStudio('home');await wait(700);
         const todayTab=[...document.querySelectorAll('.prism-created-tabs .prism-button')].find(el=>el.textContent.trim().startsWith('今天'));
         if(todayTab){todayTab.click();await wait(400);}
         const filter=document.querySelector('select[data-prism-tag-filter]');assert(filter,'Tag filter dropdown missing');
-        assert([...filter.options].some(option=>option.value==='机器学习'),'Tag missing from the dropdown');
+        assert([...filter.options].some(option=>option.value==='机器学习进阶'),'Tag missing from the dropdown');
         filter.value='实验记录';filter.dispatchEvent(new Event('change'));await wait(400);
         const chips=[...document.querySelectorAll('.prism-note-chip')].map(el=>el.textContent);
         assert(chips.some(text=>text.includes('Tagged peer')),'Filtered view lost the note with that tag');
         assert(!chips.some(text=>text.includes('Tagged note')),'Filtered view kept a note without that tag');
         filter.value='';filter.dispatchEvent(new Event('change'));await wait(300);
-        await prism.tags.remove(first.path,'机器学习',true);await wait(500);
+        await prism.tags.remove(first.path,'机器学习进阶',true);await wait(500);
         assert(!view.containerEl.querySelector('.prism-tag-row'),'Tag row survived removing the last tag');
         await waitFor(()=>!document.querySelector('.nav-file-title[data-path="Tagged note.md"]')?.dataset.prismTags,'explorer tag cleared');
         await prism.tags.clear(peer.path);

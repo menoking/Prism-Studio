@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_SETTINGS, normalizeData, normalizeTagName, normalizeTags, pathsWithTag, tagCounts, type Data, type SkinSettings } from '../src/model';
+import { DEFAULT_SETTINGS, normalizeData, normalizeTagName, normalizeTags, orderTags, pathsWithTag, renameTagIn, tagCounts, type Data, type SkinSettings } from '../src/model';
 import { PALETTES, tagHue, tagPillColors, tagTone } from '../src/appearance';
 
 const linear=(value:number)=>{const unit=value/255;return unit<=.03928?unit/12.92:Math.pow((unit+.055)/1.055,2.4);};
@@ -61,11 +61,40 @@ test('tag registry and lookups are stable',()=>{
   assert.deepEqual(tagCounts({}),[]);
 });
 
-test('note tags are on by default and can be turned off',()=>{
-  const settings=(patch:Partial<SkinSettings>)=>normalizeData({settings:{...DEFAULT_SETTINGS,...patch}}).settings;
+test('note tags are on by default and can be turned off',()=>{  const settings=(patch:Partial<SkinSettings>)=>normalizeData({settings:{...DEFAULT_SETTINGS,...patch}}).settings;
   assert.equal(DEFAULT_SETTINGS.noteTags,true);
   assert.equal(DEFAULT_SETTINGS.tagHover,true);
   assert.equal(settings({noteTags:false}).noteTags,false);
   assert.equal(settings({tagHover:false}).tagHover,false);
   assert.equal(settings({noteTags:null as unknown as boolean}).noteTags,true);
+});
+
+test('renaming a tag updates every note and collapses duplicates in place',()=>{
+  const tags={'A.md':['甲','乙'],'B.md':['甲'],'C.md':['丙']};
+  const first=renameTagIn(tags,'甲','甲子');
+  assert.equal(first.notes,2);
+  assert.deepEqual(first.tags,{'A.md':['甲子','乙'],'B.md':['甲子'],'C.md':['丙']});
+  // 甲子 -> 乙 on A.md: the two become one, keeping the position of the renamed pill.
+  const merge=renameTagIn(first.tags,'甲子','乙');
+  assert.equal(merge.notes,2);
+  assert.deepEqual(merge.tags,{'A.md':['乙'],'B.md':['乙'],'C.md':['丙']});
+  // Normalisation runs on both ends and a no-op rename leaves the store untouched.
+  assert.deepEqual(renameTagIn(tags,'#甲','甲').tags,tags);
+  assert.equal(renameTagIn(tags,'甲','甲').notes,0);
+  assert.equal(renameTagIn(tags,'不存在','新名').notes,0);
+  assert.deepEqual(renameTagIn(tags,'甲','  甲子  ').tags['A.md'],['甲子','乙']);
+  assert.deepEqual(renameTagIn(tags,'甲','').tags,tags);
+});
+
+test('a drag order is only accepted when it is a permutation',()=>{
+  const list=['甲','乙','丙'];
+  assert.deepEqual(orderTags(list,['丙','甲','乙']),['丙','甲','乙']);
+  assert.deepEqual(orderTags(list,['乙','丙','甲']),['乙','丙','甲']);
+  // Anything that drops, duplicates or invents a tag keeps the stored order.
+  assert.deepEqual(orderTags(list,['甲','乙']),list);
+  assert.deepEqual(orderTags(list,['甲','乙','丙','丁']),list);
+  assert.deepEqual(orderTags(list,['甲','甲','乙']),list);
+  assert.deepEqual(orderTags(list,['甲','乙','丁']),list);
+  assert.equal(orderTags(list,['甲','乙','丙']),list,'an unchanged order must not rewrite');
+  assert.deepEqual(orderTags([],[]),[]);
 });
